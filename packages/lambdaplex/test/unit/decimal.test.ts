@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { add, applyBps, ceilTo, cmp, div, floorTo, fromUnits, mul, sub, toUnits } from "../../src/decimal";
+import {
+  add,
+  applyBps,
+  ceilTo,
+  cmp,
+  div,
+  floorTo,
+  fromUnits,
+  mul,
+  sub,
+  toDecimalString,
+  toUnits,
+} from "../../src/decimal";
 
 describe("decimal", () => {
   it("round-trips exchange strings without float error", () => {
@@ -26,5 +38,18 @@ describe("decimal", () => {
   it("rejects non-decimals", () => {
     expect(() => toUnits("1e3")).toThrow();
     expect(() => toUnits("")).toThrow();
+  });
+
+  it("converts JSON numbers exactly, including exponent notation", () => {
+    expect(toDecimalString(0.1)).toBe("0.1");
+    expect(toDecimalString(1e-7)).toBe("0.0000001");
+    expect(toDecimalString(2.5e21)).toBe("2500000000000000000000");
+    expect(() => toUnits(Number.NaN)).toThrow();
+  });
+
+  it("rounds negative values toward the correct side", () => {
+    expect(floorTo("-1.5", "1")).toBe("-2");
+    expect(ceilTo("-1.5", "1")).toBe("-1");
+    expect(floorTo("-2", "1")).toBe("-2");
   });
 });

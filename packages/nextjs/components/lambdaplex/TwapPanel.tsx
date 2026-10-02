@@ -1,33 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import type { OrderSide, TwapEvent } from "@sh/lambdaplex";
+import type { OrderSide } from "@sh/lambdaplex";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTradingStatus } from "~~/hooks/lambdaplex/useTradingStatus";
+import type { TwapJob as Job, JobLogEntry } from "~~/lib/twapJobs.server";
 import { serverApi } from "~~/utils/lambdaplex/api";
 import { formatTime } from "~~/utils/lambdaplex/format";
 import { hashscan } from "~~/utils/lambdaplex/hedera";
 import { notification } from "~~/utils/scaffold-hbar";
 
-type LogEvent =
-  | TwapEvent
-  | { type: "track-record"; sequenceNumber: number; transactionId: string }
-  | { type: "error"; error: string };
-type Job = {
-  id: string;
-  live: boolean;
-  status: "running" | "done" | "failed" | "cancelled";
-  startedAt: number;
-  config: {
-    symbol: string;
-    side: OrderSide;
-    total: string;
-    slices: number;
-    intervalSeconds: number;
-    maxSlippageBps: number;
-  };
-  log: { at: number; event: LogEvent }[];
-};
+type LogEvent = JobLogEntry["event"];
 
 const describe = (event: LogEvent): string => {
   switch (event.type) {
@@ -38,17 +21,32 @@ const describe = (event: LogEvent): string => {
     case "fill":
       return `Fill ${event.fill.qty} @ ${event.fill.price}, settled in ${event.fill.settlementTransactionId}`;
     case "slice-settled":
-      return `Slice ${event.slice + 1} settled: ${event.filled} filled, ${event.carried} carried`;
+      return `Slice ${event.slice + 1} done: ${event.filled} filled, ${event.carried} carried${
+        event.pendingSettlement ? ` (${event.pendingSettlement} still settling)` : ""
+      }`;
     case "slice-failed":
-      return `Slice ${event.slice + 1} failed: ${event.error}`;
+      return `Slice ${event.slice + 1} failed, nothing executed: ${event.error}`;
+    case "slice-unresolved":
+      return `Slice ${event.slice + 1}: could not confirm what ${event.amount} executed (${event.error}). Stopped.`;
     case "track-record":
       return `Published to HCS as message #${event.sequenceNumber}`;
+    case "track-record-failed":
+      return `HCS publish failed (the fill stands): ${event.error}`;
     case "done":
-      return `Done: ${event.filledBase} base for ${event.filledQuote} quote, ${event.unfilled} unfilled`;
+      if (event.dryRun) return `Dry run done: nothing was placed${event.stopReason ? ` (${event.stopReason})` : ""}`;
+      return `Done: ${event.filledBase} base for ${event.filledQuote} quote, ${event.unfilled} unfilled${
+        event.unresolved !== "0" ? `, ${event.unresolved} UNRESOLVED` : ""
+      }${event.stopReason ? ` (${event.stopReason})` : ""}`;
     case "error":
       return `Error: ${event.error}`;
   }
 };
+
+const isProblem = (event: LogEvent) =>
+  event.type === "slice-failed" ||
+  event.type === "slice-unresolved" ||
+  event.type === "track-record-failed" ||
+  event.type === "error";
 
 /** Start TWAP jobs on the server (dry run or live) and follow their progress. */
 export const TwapPanel = () => {
@@ -89,7 +87,11 @@ export const TwapPanel = () => {
   };
 
   const cancel = async (id: string) => {
-    await serverApi.delete(`/api/bots/twap/${id}`).catch(() => undefined);
+    try {
+      await serverApi.delete(`/api/bots/twap/${encodeURIComponent(id)}`);
+    } catch (error) {
+      notification.error(error instanceof Error ? error.message : "Could not stop the job");
+    }
     await queryClient.invalidateQueries({ queryKey: ["twap-jobs"] });
   };
 
@@ -160,7 +162,8 @@ export const TwapPanel = () => {
 
       <section className="flex flex-col gap-3">
         <h2 className="m-0 text-lg font-semibold">Jobs</h2>
-        {!jobs.data?.length && (
+        {jobs.error && <p className="m-0 text-sm text-error">Could not load jobs: {jobs.error.message}</p>}
+        {!jobs.error && !jobs.isLoading && !jobs.data?.length && (
           <p className="m-0 text-sm text-base-content/60">
             No jobs yet. Start a dry run to see each slice planned against the live book.
           </p>
@@ -192,7 +195,7 @@ export const TwapPanel = () => {
               {job.log.map(({ at, event }, i) => (
                 <li key={i} className="flex gap-3">
                   <span className="shrink-0 tabular-nums text-base-content/50">{formatTime(at)}</span>
-                  <span className={event.type === "slice-failed" || event.type === "error" ? "text-error" : ""}>
+                  <span className={isProblem(event) ? "text-error" : ""}>
                     {describe(event)}
                     {event.type === "fill" && (
                       <a

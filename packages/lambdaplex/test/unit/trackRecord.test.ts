@@ -29,6 +29,16 @@ describe("track record", () => {
     expect(decodeEntry(JSON.stringify({ ...entry, v: 2 }))).toBeNull();
     expect(decodeEntry(JSON.stringify({ ...entry, side: "HOLD" }))).toBeNull();
     expect(decodeEntry(JSON.stringify({ ...entry, qty: 49 }))).toBeNull();
+    expect(decodeEntry(JSON.stringify({ ...entry, qty: "abc" }))).toBeNull();
+    expect(decodeEntry(JSON.stringify({ ...entry, price: "1e-7" }))).toBeNull();
+    expect(decodeEntry(JSON.stringify({ ...entry, quoteQty: "-1" }))).toBeNull();
+    expect(decodeEntry(JSON.stringify({ ...entry, commission: "" }))).toBeNull();
+  });
+
+  it("writes number amounts as plain decimals", () => {
+    const tiny = entryFromFill("s", "HBAR-USDC", "BUY", "c", { ...fill, commission: 1e-7 });
+    expect(tiny.commission).toBe("0.0000001");
+    expect(decodeEntry(encodeEntry(tiny))).toEqual(tiny);
   });
 
   it("maps Hedera transaction ids to mirror node paths", () => {

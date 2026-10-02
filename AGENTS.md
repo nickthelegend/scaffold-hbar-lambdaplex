@@ -28,7 +28,7 @@ yarn next:test && yarn next:check-types && yarn lint && yarn next:build
 | `packages/lambdaplex/src/signing.ts` | Signature V1 (query) and V2 (headers). Changing it must keep the vector tests green |
 | `packages/lambdaplex/src/client.ts` | Typed REST client, server-time sync, `LambdaplexError` |
 | `packages/lambdaplex/src/decimal.ts`, `filters.ts` | Exact decimal maths and exchange rules |
-| `packages/lambdaplex/src/twap.ts` | Pure planning (`planSlices`, `planSlice`, `slicePrice`) + `runTwap` |
+| `packages/lambdaplex/src/twap.ts` | Pure planning (`planSlices`, `planSlice`, `slicePrice`, `validateTwapConfig`) + `runTwap` |
 | `packages/lambdaplex/src/trackRecord.ts`, `hcs.ts` | Entry schema (browser-safe) and HCS publish/read (server) |
 | `packages/lambdaplex/src/index.ts` / `server.ts` | Browser-safe vs Node-only entry points |
 | `packages/nextjs/lib/*.server.ts` | Server singletons: signed client, trading gate, TWAP job store |
@@ -41,16 +41,23 @@ yarn next:test && yarn next:check-types && yarn lint && yarn next:build
 1. **Never import `@sh/lambdaplex/server` or `~~/lib/*.server` from client components.** Keys must not reach the
    browser. Browser code uses `@sh/lambdaplex` and `utils/lambdaplex/api.ts` (`publicApi` for market data,
    `serverApi` for our routes).
-2. **Every trading route checks `tradingEnabled()` first** and validates input formats before calling the SDK.
+2. **Every trading route checks `tradingEnabled()` first**, then `rejectCrossSite(req)` on POST/DELETE
+   (`{ requireJson: true }` for POST), and validates input formats before calling the SDK.
 3. **Prices and quantities are decimal strings.** Use `decimal.ts` helpers; never `Number` maths for amounts sent to
    the exchange.
 4. **Signature V1 signs params in send order.** Build queries with `signedQuery`, never by hand.
 5. **Fills are final only when `order.terminal && pendingSettlementQty == "0"`.** Don't publish track-record entries
    before that.
-6. **Track-record entries are schema-versioned (`v: 1`).** Add fields compatibly or bump `v` and keep decoding the
-   old one.
-7. **No simulated exchange in tests.** Unit tests use published vectors and real captured responses
-   (`test/fixtures`); anything needing the API goes in `test/live`.
+6. **Never re-trade an order the exchange may hold.** In `runTwap`, a slice is carried only when it certainly
+   executed nothing (4xx rejection, or an ambiguous failure followed by an ABSENT lookup by client order id).
+   Anything else is resolved through `allOrderFills` or stops the run as `unresolved`. Event callbacks are
+   best-effort and must never change trading. Keep `runTwap.test.ts` green when touching this.
+7. **Track-record entries are schema-versioned (`v: 1`).** Add fields compatibly or bump `v` and keep decoding the
+   old one. Amounts are plain decimal strings; `decodeEntry` drops anything else.
+8. **No simulated exchange or HTTP mocks in tests.** Unit tests use published vectors and real captured responses
+   (`test/fixtures`); anything needing the API goes in `test/live`, which must stay public-API only (never place
+   orders). The only allowed double is an in-memory implementation of `TwapClient` for `runTwap` tests.
+9. **Read keys lazily.** Module-level code must not parse keys; surface problems through `configError`.
 
 ## Conventions
 

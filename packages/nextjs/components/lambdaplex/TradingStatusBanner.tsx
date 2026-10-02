@@ -16,6 +16,17 @@ export const TradingStatusBanner = () => {
       </div>
     );
   }
+  if (status.configError) {
+    return (
+      <div role="alert" className="alert alert-warning alert-soft text-sm">
+        <LockClosedIcon className="h-5 w-5" />
+        <span>
+          Read-only mode: trading is configured but unusable. {status.configError}. Fix it in{" "}
+          <code>packages/nextjs/.env.local</code> and restart.
+        </span>
+      </div>
+    );
+  }
   return (
     <div role="status" className="alert alert-soft text-sm">
       <LockClosedIcon className="h-5 w-5" />

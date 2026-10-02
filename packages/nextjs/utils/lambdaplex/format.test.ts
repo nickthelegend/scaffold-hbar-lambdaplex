@@ -8,4 +8,9 @@ describe("formatAmount", () => {
     expect(formatAmount("1234567.5")).toBe("1,234,567.5");
     expect(formatAmount(5)).toBe("5");
   });
+
+  it("expands exponent notation instead of printing it", () => {
+    expect(formatAmount("1e-7", 8)).toBe("0.0000001");
+    expect(formatAmount(2.5e-5, 8)).toBe("0.000025");
+  });
 });

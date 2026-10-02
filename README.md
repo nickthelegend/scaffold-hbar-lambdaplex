@@ -91,14 +91,29 @@ quantity, minimum notional, and the percent-price band around the best price. Th
 
 A **time-weighted average price** executor ([`packages/lambdaplex/src/twap.ts`](packages/lambdaplex/src/twap.ts)):
 
-1. Split `total` into `slices` equal parts (exactly, in decimal arithmetic).
+1. Validate the config (`validateTwapConfig`), then split `total` into `slices` equal parts (exactly, in decimal
+   arithmetic).
 2. For each slice, read the best opposite price and place an **IOC limit** capped at `maxSlippageBps` from it. The
-   cap is rounded to the tick *inside* the bound.
+   cap is rounded to the tick *inside* the bound and kept inside the market's percent-price band.
 3. Size BUYs in whole lots within the quote budget. If a slice is below the exchange minimum, it **rolls into the
    next slice** rather than failing.
-4. Poll `/api/v2/order/fills` until the order is `terminal` and `pendingSettlementQty == 0`. Only then are fills
-   reported, each with its Hedera `settlementTransactionId`.
+4. Poll `/api/v2/order/fills` (all pages) until the order is `terminal` and `pendingSettlementQty == 0`. Only then
+   are fills reported, each with its Hedera `settlementTransactionId`.
 5. Carry anything unfilled into the next slice, and stop after 3 consecutive failures.
+
+**It never trades the same money twice.** Once the exchange may hold an order, the executor finds out what that
+order executed before it carries anything:
+
+- `onEvent` (and HCS publishing inside it) is best-effort. If it throws, the error goes to `onEventError` and the
+  fill still counts.
+- If the placement request fails without an HTTP status (network error, timeout) or with a 5xx, the bot looks the
+  order up by its `newClientOrderId`. Found: it is tracked like any accepted order. Absent: the slice is carried.
+- If settlement polling times out or keeps failing after an ack, an order that can no longer fill is counted at its
+  matched quantity. Otherwise the run **stops** and reports the slice as `unresolved` (CLI exit code 2): check the
+  account before trading that amount again.
+- Stop (UI) or Ctrl-C (CLI) interrupts the wait between slices and is checked again right before every order. An
+  order already sent is still followed to settlement.
+- `unfilled` in the result is the carry plus every slice that never ran. Dry runs report everything as unfilled.
 
 Run it from the UI (`/bots`, jobs run inside the Next server) or as a long-lived CLI process:
 
@@ -113,8 +128,10 @@ template publishes every settled fill to an **HCS topic** whose **submit key** b
 
 - **Ordered and immutable.** Messages get consensus timestamps and sequence numbers and can't be edited or removed.
 - **Attributable.** Only the operator's key can append, so nobody can impersonate the strategy.
-- **Checkable.** Each entry carries the Hedera transaction id that settled the trade. `/bots` looks every one up on
-  the mainnet mirror node and shows **verified** only if it exists and succeeded.
+- **Checkable.** Each entry carries the Hedera transaction id that settled the trade. `/bots` looks the newest 100
+  up on the mainnet mirror node and shows **tx succeeded** if the transaction exists and succeeded. It does not
+  match amounts against that transaction, so treat it as evidence, not proof. Totals cover every entry: reads
+  follow the mirror node's `links.next` pagination.
 
 ```bash
 yarn lambdaplex:topic:create          # prints TRACK_RECORD_TOPIC_ID; put it in .env.local
@@ -138,9 +155,10 @@ tokens. Fills therefore have a Hedera transaction id, which this template treats
 |---|---|---|
 | **Signature V1** (orders, account, fills) | Params in send order + `recvWindow` + `timestamp`, `k=v&…`, Ed25519, base64 `signature` param | [`signing.ts`](packages/lambdaplex/src/signing.ts) |
 | **Signature V2** (`X-PLEX-*` headers) | Canonical text `LPX-ED25519-V2\n<key>\n<METHOD>\n<path>\n<ts>\n<recvWindow>\n<sha256(body)>\n` | [`signing.ts`](packages/lambdaplex/src/signing.ts) |
-| Clock skew | Syncs with `/api/v1/time` before the first signed call | [`client.ts`](packages/lambdaplex/src/client.ts) |
+| Clock skew | Syncs with `/api/v1/time` before the first signed call, every 10 minutes, and again (with one re-signed retry) after a timestamp/`recvWindow` rejection | [`client.ts`](packages/lambdaplex/src/client.ts) |
+| Timeouts | Every request carries a 15 s `AbortSignal.timeout` (`timeoutMs`); the TWAP treats a timed-out order as unknown and looks it up | [`client.ts`](packages/lambdaplex/src/client.ts), `twap.ts` |
 | Exchange rules | Tick, step, min qty, min notional, per-side price band; exact decimal maths, never floats | [`filters.ts`](packages/lambdaplex/src/filters.ts), [`decimal.ts`](packages/lambdaplex/src/decimal.ts) |
-| Idempotency | `newClientOrderId` is required by Lambdaplex; generated per order or per TWAP slice | `orders/route.ts`, `twap.ts` |
+| Idempotency | `newClientOrderId` is required by Lambdaplex; generated per order or per TWAP slice, and used to find an order whose placement response was lost (`orderFills(symbol, { origClientOrderId })`) | `orders/route.ts`, `twap.ts` |
 | Finality | IOC orders can report `EXPIRED` before their fills settle; the bot waits for `terminal && pendingSettlementQty == 0` | `twap.ts` |
 | Live data | WebSocket `subscribe` to `<symbol>@depth` and `<symbol>@trade`; depth diffs trigger REST snapshots, trades stream in; polling fallback | [`useMarketStream.ts`](packages/nextjs/hooks/lambdaplex/useMarketStream.ts) |
 | Errors | RFC 7807 problem details and `{code,msg}` mapped to `LambdaplexError`; signed URLs are never echoed back | `client.ts`, `lambdaplex.server.ts` |
@@ -172,10 +190,11 @@ packages/
 
 Two entry points keep server secrets out of browser bundles:
 
-- `@sh/lambdaplex`, browser-safe: `marketRules`, `validateLimitOrder`, decimal helpers, `planSlices`/`planSlice`,
-  `runTwap`, track-record encode/decode/summarise, types.
-- `@sh/lambdaplex/server`, Node only: `LambdaplexClient`, `signV1`/`signV2Headers`/`loadEd25519Key`,
-  `createTrackRecordTopic`, `publishEntry`, `readTrackRecord`, `verifySettlement`.
+- `@sh/lambdaplex`, browser-safe: `marketRules`, `validateLimitOrder`, `validateMarketOrder`, decimal helpers,
+  `planSlices`/`planSlice`, `validateTwapConfig`, `runTwap`, track-record encode/decode/summarise, types.
+- `@sh/lambdaplex/server`, Node only: `LambdaplexClient` (incl. `allOrderFills`, `getOrderByClientId`,
+  `configError`), `signV1`/`signV2Headers`/`loadEd25519Key`, `operatorClient`, `createTrackRecordTopic`,
+  `publishEntry`, `readTrackRecord`, `verifySettlement`.
 
 ```ts
 import { LambdaplexClient } from "@sh/lambdaplex/server";
@@ -186,18 +205,19 @@ const ack = await lp.placeOrder({
   symbol: "HBAR-USDC", side: "BUY", type: "LIMIT", timeInForce: "IOC",
   price: book.asks[0][0], quantity: "50", newClientOrderId: "my-order-1",
 });
-const fills = await lp.orderFills("HBAR-USDC", ack.orderId); // settlementTransactionId per fill
+const fills = await lp.allOrderFills("HBAR-USDC", ack.orderId); // every page; settlementTransactionId per fill
 ```
 
 ## StrategyRegistry contract
 
 [`packages/foundry/contracts/StrategyRegistry.sol`](packages/foundry/contracts/StrategyRegistry.sol) is an on-chain
-directory that other contracts and apps can trust:
+directory that other contracts and apps can read. It records what operators claim; it does not check that the
+registrant controls the topic, so consumers should compare the topic's submit key with the operator they expect.
 
 | Function | Purpose |
 |---|---|
-| `register(name, topicNum, venueAccount, paramsHash)` | Binds a strategy to its operator, HCS topic `0.0.<topicNum>`, Lambdaplex account and parameter hash |
-| `update`, `setActive`, `transferOperator` | Operator-only maintenance |
+| `register(name, topicNum, venueAccount, paramsHash)` | Binds a strategy to its operator, HCS topic `0.0.<topicNum>`, Lambdaplex account (≤ 64 bytes) and parameter hash |
+| `update`, `setActive`, `transferOperator` | Operator-only maintenance. Moving to a different topic clears the checkpoint (`CheckpointReset`) |
 | `anchorCheckpoint(id, sequenceNumber, runningHash, realizedPnl)` | Anchors the topic's 48-byte running hash at a sequence number; checkpoints only move forward |
 | `getStrategy`, `latestCheckpoint`, `listStrategies(offset, limit)`, `strategiesOf(operator)` | Reads |
 
@@ -211,15 +231,17 @@ yarn foundry:deploy --network hedera_testnet    # writes packages/nextjs/contrac
 
 ## Testing
 
-No simulated exchange anywhere: unit tests use published vectors and real captured API responses, and live tests
-hit the real API.
+No simulated exchange or HTTP mocks: unit tests use published vectors and real captured API responses, and live
+tests hit the real (public) API. The one test double is `runTwap.test.ts`'s in-memory implementation of the four
+client calls the executor makes, which is how the failure paths (lost responses, settlement timeouts, aborts,
+throwing callbacks) are exercised without placing orders.
 
 | Suite | Command | What it proves |
 |---|---|---|
-| SDK unit | `yarn lambdaplex:test` | V1 signatures equal Hummingbot's vectors, V2 equals the docs vector; decimal maths; rule validation on a captured `exchangeInfo`; TWAP slicing, pricing and roll-over; track-record schema |
+| SDK unit | `yarn lambdaplex:test` | V1 signatures equal Hummingbot's vectors, V2 equals the docs vector; decimal maths; rule validation on a captured `exchangeInfo`; TWAP slicing, pricing and roll-over; `runTwap` never over-executes (throwing callbacks, settlement timeouts, lost responses, aborts); track-record schema |
 | SDK live | `yarn lambdaplex:test:live` | Real API: markets and rules parse, book is sane, a full TWAP plans against the live book, and (with keys) a signed `/account` call authenticates |
-| Contracts | `yarn foundry:test` | Registry access control, validation, monotonic checkpoints, paging, fuzzed registration |
-| Frontend | `yarn next:test` | Number formatting, HCS message decoding |
+| Contracts | `yarn foundry:test` | Registry access control, validation, bounded `venueAccount`, monotonic checkpoints, checkpoint reset on topic change, paging, fuzzed registration |
+| Frontend | `yarn next:test` | Number formatting, HCS message decoding, mirror-node pagination links |
 | Quality | `yarn lint && yarn next:check-types && yarn next:build` | ESLint/Prettier, forge fmt, `tsc` across packages, production build |
 
 ## Configuration
@@ -230,7 +252,8 @@ hit the real API.
 |---|---|---|
 | `LAMBDAPLEX_API_KEY`, `LAMBDAPLEX_PRIVATE_KEY` | server | Signing; required for trading |
 | `TRADING_ENABLED` | server | Must be `true` for orders and live TWAPs, even with keys present |
-| `HEDERA_NETWORK`, `HEDERA_OPERATOR_ID`, `HEDERA_OPERATOR_KEY` | server | Operator that publishes the HCS track record |
+| `HEDERA_NETWORK`, `HEDERA_OPERATOR_ID`, `HEDERA_OPERATOR_KEY` | server | Operator that publishes the HCS track record (DER keys of either curve, or raw hex) |
+| `HEDERA_OPERATOR_KEY_TYPE` | server | `ECDSA` (default) or `ED25519`, for raw hex operator keys |
 | `TRACK_RECORD_TOPIC_ID` / `NEXT_PUBLIC_TRACK_RECORD_TOPIC_ID` | server / browser | Topic to publish to / display |
 | `STRATEGY_NAME` | server | Name written into each entry |
 | `NEXT_PUBLIC_LAMBDAPLEX_API_BASE`, `NEXT_PUBLIC_LAMBDAPLEX_WS_URL` | browser | Override endpoints |
@@ -239,12 +262,19 @@ hit the real API.
 
 - **Keys stay on the server.** Only route handlers (`import "server-only"`) and the CLI read them. The browser
   bundle imports `@sh/lambdaplex`, never `@sh/lambdaplex/server`.
-- **Read-only by default.** `TRADING_ENABLED` must be explicitly `true`. Hosted demos run without it.
+- **Read-only by default.** `TRADING_ENABLED` must be explicitly `true`. Hosted demos run without it. A malformed
+  `LAMBDAPLEX_PRIVATE_KEY` disables trading and is reported as `configError` by `/api/health` and
+  `/api/lambdaplex/status`; it never takes the app down.
+- **No auth, so keep trading deployments private.** `TRADING_ENABLED` is a switch, not a login: anyone who can reach
+  a trading-enabled server can trade with its key. Run it on localhost or behind your own auth.
+- **CSRF.** State-changing routes (`POST`/`DELETE` orders, `POST /api/bots/twap`, `DELETE /api/bots/twap/[id]`)
+  refuse a browser `Origin` from another host (403), and POSTs must be `application/json` (415), which a cross-site
+  form cannot send. Requests without `Origin` (curl, scripts) are allowed.
 - **Defence in depth on orders.** Symbol and decimal formats are checked, then the live market rules, before signing.
 - **Error hygiene.** Error responses carry the exchange's message but never the signed request URL.
 - **Track-record integrity** comes from HCS consensus ordering plus the topic's submit key, not from this app.
-- The demo TWAP job store is in-memory: fine for a dev server, not for production. Use the CLI under a process
-  manager for real bots.
+- The demo TWAP job store is in-memory and bounded (5 running jobs, the newest 20 finished ones kept): fine for a
+  dev server, not for production. Use the CLI under a process manager for real bots.
 
 ## Proof
 

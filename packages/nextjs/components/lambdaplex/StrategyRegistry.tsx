@@ -13,7 +13,7 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 /** Strategies registered on-chain (Hedera testnet), each linked to its HCS track record. */
 export const StrategyRegistryView = () => {
   const { address } = useAccount();
-  const { data: registry } = useDeployedContractInfo({ contractName: "StrategyRegistry" });
+  const { data: registry, isLoading: registryLoading } = useDeployedContractInfo({ contractName: "StrategyRegistry" });
   const deployed = Boolean(registry && registry.address !== ZERO);
   const { data: strategies, isLoading } = useScaffoldReadContract({
     contractName: "StrategyRegistry",
@@ -30,8 +30,11 @@ export const StrategyRegistryView = () => {
   });
 
   const topicMatch = TOPIC_RE.exec(form.topic);
-  const valid = form.name.length > 0 && form.name.length <= 64 && topicMatch;
+  const valid = form.name.length > 0 && form.name.length <= 64 && form.venueAccount.length <= 64 && topicMatch;
 
+  if (registryLoading) {
+    return <div className="h-32 rounded-xl bg-base-200 animate-pulse" aria-label="Loading registry" />;
+  }
   if (!deployed) {
     return (
       <p className="m-0 text-sm text-base-content/70">
@@ -48,10 +51,14 @@ export const StrategyRegistryView = () => {
         onSubmit={async e => {
           e.preventDefault();
           if (!valid) return;
-          await writeContractAsync({
-            functionName: "register",
-            args: [form.name, BigInt(topicMatch![1]), form.venueAccount, keccak256(toBytes(form.params))],
-          });
+          try {
+            await writeContractAsync({
+              functionName: "register",
+              args: [form.name, BigInt(topicMatch![1]), form.venueAccount, keccak256(toBytes(form.params))],
+            });
+          } catch {
+            // Rejections and reverts are already shown as notifications by the scaffold write hook.
+          }
         }}
       >
         <h2 className="m-0 text-lg font-semibold">Register a strategy</h2>

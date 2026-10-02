@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { CheckBadgeIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-import { useTrackRecord } from "~~/hooks/lambdaplex/useTrackRecord";
+import { SHOWN_ENTRIES, useTrackRecord } from "~~/hooks/lambdaplex/useTrackRecord";
 import { useTradingStatus } from "~~/hooks/lambdaplex/useTradingStatus";
 import { formatAmount, formatDateTime } from "~~/utils/lambdaplex/format";
 import { type HederaNetwork, hashscan } from "~~/utils/lambdaplex/hedera";
 
 /**
- * Reads a strategy's HCS topic from the mirror node and checks every entry's settlement transaction on Hedera
- * mainnet. Consensus order and the topic's submit key make the record append-only and attributable.
+ * Reads a strategy's HCS topic from the mirror node and checks that each listed entry's settlement transaction
+ * exists and succeeded on Hedera mainnet. Consensus order and the topic's submit key make the record append-only and
+ * attributable. The check does not match amounts against the transaction, so it is evidence, not proof.
  */
+const TOPIC_RE = /^0\.0\.\d+$/;
+
 export const TrackRecord = ({
   defaultTopic,
   defaultNetwork,
@@ -19,10 +22,12 @@ export const TrackRecord = ({
   defaultNetwork?: HederaNetwork;
 }) => {
   const { data: status } = useTradingStatus();
-  const [input, setInput] = useState(defaultTopic ?? "");
-  const topicId = input || status?.trackRecordTopicId || process.env.NEXT_PUBLIC_TRACK_RECORD_TOPIC_ID || "";
+  // `null` until the visitor types, so clearing the field doesn't snap back to the configured topic.
+  const [input, setInput] = useState<string | null>(defaultTopic ?? null);
+  const topicId = input ?? (status?.trackRecordTopicId || process.env.NEXT_PUBLIC_TRACK_RECORD_TOPIC_ID || "");
+  const validTopic = TOPIC_RE.test(topicId);
   const network: HederaNetwork = defaultNetwork ?? status?.trackRecordNetwork ?? "testnet";
-  const { data, isLoading, error } = useTrackRecord(network, topicId);
+  const { data, isLoading, error } = useTrackRecord(network, validTopic ? topicId : undefined);
 
   return (
     <section className="flex flex-col gap-4 rounded-2xl border border-base-300 bg-base-100 p-5">
@@ -44,9 +49,9 @@ export const TrackRecord = ({
         </label>
       </header>
 
-      {!topicId ? (
+      {!validTopic ? (
         <p className="m-0 text-sm text-base-content/60">
-          Enter a topic id, or create one with <code>yarn lambdaplex:topic:create</code>.
+          Enter a topic id (0.0.x), or create one with <code>yarn lambdaplex:topic:create</code>.
         </p>
       ) : isLoading ? (
         <div className="h-32 rounded-xl bg-base-200 animate-pulse" aria-label="Loading track record" />
@@ -85,6 +90,11 @@ export const TrackRecord = ({
                   </div>
                 ))}
               </dl>
+              {data.total > data.messages.length && (
+                <p className="m-0 text-xs text-base-content/60">
+                  Totals cover all {data.total} entries; the newest {SHOWN_ENTRIES} are listed.
+                </p>
+              )}
               <div className="overflow-x-auto">
                 <table className="table table-sm">
                   <thead>
@@ -112,13 +122,14 @@ export const TrackRecord = ({
                             href={hashscan("mainnet", "transaction", entry.settlementTx)}
                             target="_blank"
                             rel="noreferrer"
+                            title="The settlement transaction exists on mainnet and succeeded. Amounts are not matched."
                           >
                             {verified ? (
                               <CheckBadgeIcon className="h-4 w-4 text-success" />
                             ) : (
                               <ExclamationTriangleIcon className="h-4 w-4 text-warning" />
                             )}
-                            {verified ? "verified" : "not found"}
+                            {verified ? "tx succeeded" : "not found"}
                           </a>
                         </td>
                       </tr>

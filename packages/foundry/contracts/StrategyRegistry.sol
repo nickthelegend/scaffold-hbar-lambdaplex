@@ -27,6 +27,7 @@ contract StrategyRegistry {
     }
 
     uint256 internal constant MAX_NAME_LENGTH = 64;
+    uint256 internal constant MAX_VENUE_ACCOUNT_LENGTH = 64; // "0.0.x" ids and 0x EVM addresses both fit
     uint256 internal constant RUNNING_HASH_LENGTH = 48;
 
     Strategy[] internal _strategies;
@@ -38,10 +39,12 @@ contract StrategyRegistry {
     event StrategyStatusChanged(uint256 indexed id, bool active);
     event OperatorTransferred(uint256 indexed id, address indexed previousOperator, address indexed newOperator);
     event CheckpointAnchored(uint256 indexed id, uint64 sequenceNumber, int128 realizedPnl, bytes runningHash);
+    event CheckpointReset(uint256 indexed id, uint64 previousTopicNum);
 
     error UnknownStrategy(uint256 id);
     error NotOperator(uint256 id);
     error InvalidName();
+    error InvalidVenueAccount();
     error InvalidTopic();
     error InvalidOperator();
     error InvalidRunningHash();
@@ -59,6 +62,7 @@ contract StrategyRegistry {
     {
         if (bytes(name).length == 0 || bytes(name).length > MAX_NAME_LENGTH) revert InvalidName();
         if (topicNum == 0) revert InvalidTopic();
+        if (bytes(venueAccount).length > MAX_VENUE_ACCOUNT_LENGTH) revert InvalidVenueAccount();
 
         id = _strategies.length;
         _strategies.push(
@@ -76,9 +80,16 @@ contract StrategyRegistry {
         emit StrategyRegistered(id, msg.sender, topicNum, name);
     }
 
+    /// @notice Changes the strategy's topic or parameters. Moving to a different topic clears the checkpoint: its
+    ///         sequence number and running hash describe the old topic and mean nothing for the new one.
     function update(uint256 id, uint64 topicNum, bytes32 paramsHash) external onlyOperator(id) {
         if (topicNum == 0) revert InvalidTopic();
         Strategy storage strategy = _strategies[id];
+        uint64 previousTopicNum = strategy.topicNum;
+        if (topicNum != previousTopicNum) {
+            delete _latestCheckpoint[id];
+            emit CheckpointReset(id, previousTopicNum);
+        }
         strategy.topicNum = topicNum;
         strategy.paramsHash = paramsHash;
         emit StrategyUpdated(id, topicNum, paramsHash);

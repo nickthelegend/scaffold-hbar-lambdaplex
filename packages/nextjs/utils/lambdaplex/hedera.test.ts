@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeTopicMessages, hashscan } from "~~/utils/lambdaplex/hedera";
+import { decodeTopicMessages, hashscan, mirrorNextUrl } from "~~/utils/lambdaplex/hedera";
 
 const entry = {
   v: 1,
@@ -38,6 +38,31 @@ describe("track record decoding", () => {
     ]);
     expect(record).toHaveLength(1);
     expect(record[0]).toMatchObject({ sequenceNumber: 1, payer: "0.0.7", entry: { qty: "49", side: "BUY" } });
+  });
+
+  it("skips entries whose amounts are not plain decimals", () => {
+    const record = decodeTopicMessages([
+      {
+        sequence_number: 1,
+        consensus_timestamp: "1.1",
+        payer_account_id: "0.0.7",
+        message: base64(JSON.stringify({ ...entry, qty: "abc" })),
+      },
+      {
+        sequence_number: 2,
+        consensus_timestamp: "1.2",
+        payer_account_id: "0.0.7",
+        message: base64(JSON.stringify({ ...entry, price: "1e-7" })),
+      },
+    ]);
+    expect(record).toHaveLength(0);
+  });
+
+  it("follows the mirror node's next link on the same host", () => {
+    expect(mirrorNextUrl("testnet", "/api/v1/topics/0.0.5/messages?limit=100&timestamp=gt:1.2")).toBe(
+      "https://testnet.mirrornode.hedera.com/api/v1/topics/0.0.5/messages?limit=100&timestamp=gt:1.2",
+    );
+    expect(mirrorNextUrl("mainnet", null)).toBeNull();
   });
 
   it("links to HashScan", () => {

@@ -79,3 +79,24 @@ export function validateLimitOrder(
   }
   return problems;
 }
+
+/**
+ * Checks a base-sized MARKET order: lot size always, and the minimum notional at `referencePrice` (the best opposite
+ * price) when one is known. The exchange values market orders at its own average price, so this is a pre-check.
+ */
+export function validateMarketOrder(
+  rules: MarketRules,
+  order: { quantity: string },
+  referencePrice?: string,
+): string[] {
+  const problems: string[] = [];
+  if (cmp(order.quantity, rules.minQty) < 0) problems.push(`Quantity must be at least ${rules.minQty}.`);
+  if (!isMultipleOf(order.quantity, rules.stepSize)) problems.push(`Quantity must be a multiple of ${rules.stepSize}.`);
+  if (referencePrice && cmp(referencePrice, "0") > 0) {
+    const notional = mul(referencePrice, order.quantity);
+    if (cmp(notional, rules.minNotional) < 0) {
+      problems.push(`Order value ≈${notional} ${rules.quoteAsset} is below the ${rules.minNotional} minimum.`);
+    }
+  }
+  return problems;
+}

@@ -107,10 +107,22 @@ export type OrderFillsPage = {
     executedQty: string;
     cumulativeQuoteQty: string;
   };
+  /** Frozen event cut of the first page; echoed on every continuation so all pages describe the same state. */
+  frontier?: OrderFillsFrontier;
+  /** Totals across all pages of this cut, not just this page. */
   settledExecutedQty: string;
   settledCumulativeQuoteQty: string;
   pendingSettlementQty: string;
   fills: Fill[];
   hasMore?: boolean;
-  nextPageAfterCursorId?: number;
+  nextPageAfterCursorId?: number | null;
 };
+
+export type OrderFillsFrontier = {
+  orderProjectionThroughEventIds: number[];
+  fillProjectionThroughEventIds: number[];
+  capturedAt: number;
+};
+
+/** An order named by its exchange id or by the `newClientOrderId` it was placed with. */
+export type OrderRef = string | { orderId: string } | { origClientOrderId: string };

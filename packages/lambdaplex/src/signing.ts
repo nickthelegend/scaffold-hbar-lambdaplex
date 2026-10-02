@@ -22,7 +22,7 @@ const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "he
  */
 export function loadEd25519Key(input: string): Ed25519Key {
   const text = input.trim().replace(/\\n/g, "\n");
-  if (text.includes("PRIVATE KEY")) return createPrivateKey(text);
+  if (text.includes("PRIVATE KEY")) return assertEd25519(createPrivateKey(text));
 
   const hex = text.replace(/^0x/, "");
   if (/^[0-9a-fA-F]{64}$/.test(hex)) {
@@ -35,7 +35,10 @@ export function loadEd25519Key(input: string): Ed25519Key {
 
   const der = Buffer.from(text, "base64");
   if (der.length === 0) throw new Error("Lambdaplex private key is empty or not base64/PEM/hex");
-  const key = createPrivateKey({ key: der, format: "der", type: "pkcs8" });
+  return assertEd25519(createPrivateKey({ key: der, format: "der", type: "pkcs8" }));
+}
+
+function assertEd25519(key: KeyObject): KeyObject {
   if (key.asymmetricKeyType !== "ed25519") throw new Error("Lambdaplex API keys must be Ed25519");
   return key;
 }

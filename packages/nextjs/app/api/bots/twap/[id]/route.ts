@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { rejectCrossSite } from "~~/lib/lambdaplex.server";
 import { cancelJob, getJob } from "~~/lib/twapJobs.server";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +9,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return job ? NextResponse.json(job) : NextResponse.json({ error: "Unknown job" }, { status: 404 });
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const refused = rejectCrossSite(req);
+  if (refused) return refused;
   const { id } = await params;
   if (!getJob(id)) return NextResponse.json({ error: "Unknown job" }, { status: 404 });
   cancelJob(id);

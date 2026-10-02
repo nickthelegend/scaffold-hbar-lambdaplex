@@ -1,22 +1,19 @@
 /**
  * Creates the HCS topic a strategy publishes its track record to. Only the operator key can submit to it.
- *   HEDERA_OPERATOR_ID=0.0.x HEDERA_OPERATOR_KEY=0x... yarn lambdaplex:topic:create [memo]
+ *   HEDERA_OPERATOR_ID=0.0.x HEDERA_OPERATOR_KEY=0x... [HEDERA_OPERATOR_KEY_TYPE=ED25519] yarn lambdaplex:topic:create [memo]
  */
-import { AccountId, Client, PrivateKey } from "@hiero-ledger/sdk";
 import { config as loadEnv } from "dotenv";
-import { createTrackRecordTopic } from "../src/server";
+import { fileURLToPath } from "node:url";
+import { createTrackRecordTopic, operatorClient } from "../src/server";
 
-loadEnv({ path: new URL("../../nextjs/.env.local", import.meta.url).pathname });
+loadEnv({ path: fileURLToPath(new URL("../../nextjs/.env.local", import.meta.url)) });
 loadEnv();
 
-const { HEDERA_OPERATOR_ID, HEDERA_OPERATOR_KEY, HEDERA_NETWORK } = process.env;
-if (!HEDERA_OPERATOR_ID || !HEDERA_OPERATOR_KEY)
-  throw new Error("Set HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY (ECDSA)");
-
-const client = (HEDERA_NETWORK === "mainnet" ? Client.forMainnet() : Client.forTestnet()).setOperator(
-  AccountId.fromString(HEDERA_OPERATOR_ID),
-  PrivateKey.fromStringECDSA(HEDERA_OPERATOR_KEY),
-);
+const client = operatorClient(process.env);
+if (!client)
+  throw new Error(
+    "Set HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY (and HEDERA_OPERATOR_KEY_TYPE=ED25519 for raw ED25519 keys)",
+  );
 try {
   const topicId = await createTrackRecordTopic(client, process.argv[2] ?? "Lambdaplex strategy track record (v1)");
   console.log(`Track record topic: ${topicId}`);

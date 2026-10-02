@@ -5,8 +5,23 @@
 const SCALE = 18;
 const ONE = 10n ** BigInt(SCALE);
 
+/** Rewrites exponent notation ("1e-7", "2.5E+3") as a plain decimal, digit for digit. */
+function expandExponent(text: string): string {
+  const match = /^(-?)(\d+)(?:\.(\d*))?e([+-]?\d+)$/i.exec(text);
+  if (!match) return text;
+  const [, sign, whole, fraction = "", exponent] = match;
+  const digits = whole + fraction;
+  const point = whole.length + Number(exponent);
+  if (point <= 0) return `${sign}0.${"0".repeat(-point)}${digits}`;
+  if (point >= digits.length) return `${sign}${digits}${"0".repeat(point - digits.length)}`;
+  return `${sign}${digits.slice(0, point)}.${digits.slice(point)}`;
+}
+
 export function toUnits(value: string | number): bigint {
-  const text = typeof value === "number" ? value.toFixed(SCALE) : value.trim();
+  if (typeof value === "number" && !Number.isFinite(value)) throw new Error(`Not a decimal: "${value}"`);
+  // Numbers: String() is the shortest round-trip form (0.1 → "0.1"; toFixed would expose binary noise), expanded
+  // from exponent notation (1e-7). Strings must already be plain decimals.
+  const text = typeof value === "number" ? expandExponent(String(value)) : value.trim();
   const match = /^(-)?(\d*)(?:\.(\d*))?$/.exec(text);
   if (!match || (match[2] === "" && (match[3] ?? "") === "")) throw new Error(`Not a decimal: "${value}"`);
   const [, sign, whole, fraction = ""] = match;
@@ -27,7 +42,9 @@ export function floorTo(value: string, step: string): string {
   const v = toUnits(value);
   const s = toUnits(step);
   if (s <= 0n) return fromUnits(v);
-  return fromUnits((v / s) * s);
+  // BigInt division truncates toward zero; step down for negative values that are not already multiples.
+  const q = v / s - (v < 0n && v % s !== 0n ? 1n : 0n);
+  return fromUnits(q * s);
 }
 
 /** Smallest multiple of `step` that is ≥ value. */
@@ -35,7 +52,8 @@ export function ceilTo(value: string, step: string): string {
   const v = toUnits(value);
   const s = toUnits(step);
   if (s <= 0n) return fromUnits(v);
-  return fromUnits(((v + s - 1n) / s) * s);
+  const q = v / s + (v > 0n && v % s !== 0n ? 1n : 0n);
+  return fromUnits(q * s);
 }
 
 export function mul(a: string, b: string): string {
@@ -54,6 +72,11 @@ export function add(a: string, b: string): string {
 
 export function sub(a: string, b: string): string {
   return fromUnits(toUnits(a) - toUnits(b));
+}
+
+/** Normalises an API amount (JSON number or string, possibly in exponent form) to a plain decimal string. */
+export function toDecimalString(value: string | number): string {
+  return fromUnits(toUnits(value));
 }
 
 export function cmp(a: string, b: string): -1 | 0 | 1 {

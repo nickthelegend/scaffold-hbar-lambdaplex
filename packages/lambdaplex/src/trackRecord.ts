@@ -1,4 +1,4 @@
-import { add, cmp, div } from "./decimal";
+import { add, cmp, div, toDecimalString } from "./decimal";
 import type { Fill, OrderSide } from "./types";
 
 /**
@@ -43,10 +43,10 @@ export function entryFromFill(
     side,
     orderId: fill.orderId,
     clientOrderId,
-    price: String(fill.price),
-    qty: String(fill.qty),
-    quoteQty: String(fill.quoteQty),
-    commission: String(fill.commission),
+    price: toDecimalString(fill.price),
+    qty: toDecimalString(fill.qty),
+    quoteQty: toDecimalString(fill.quoteQty),
+    commission: toDecimalString(fill.commission),
     commissionAsset: fill.commissionAsset,
     time: fill.time,
     settlementTx: fill.settlementTransactionId,
@@ -74,6 +74,10 @@ const STRING_FIELDS = [
   "settlementTx",
 ] as const;
 
+/** Amount fields must be plain non-negative decimals ("49", "0.101057"): no signs, exponents or blanks. */
+const DECIMAL_FIELDS = ["price", "qty", "quoteQty", "commission"] as const;
+const PLAIN_DECIMAL = /^\d{1,30}(\.\d{1,18})?$/;
+
 /** Parses a topic message; returns null for anything that is not a well-formed v1 entry. */
 export function decodeEntry(message: string): TrackRecordEntry | null {
   let value: unknown;
@@ -86,8 +90,9 @@ export function decodeEntry(message: string): TrackRecordEntry | null {
   const entry = value as Record<string, unknown>;
   if (entry.v !== 1 || entry.venue !== "lambdaplex") return null;
   if (entry.side !== "BUY" && entry.side !== "SELL") return null;
-  if (typeof entry.time !== "number") return null;
+  if (typeof entry.time !== "number" || !Number.isFinite(entry.time)) return null;
   if (!STRING_FIELDS.every(field => typeof entry[field] === "string")) return null;
+  if (!DECIMAL_FIELDS.every(field => PLAIN_DECIMAL.test(entry[field] as string))) return null;
   return entry as TrackRecordEntry;
 }
 

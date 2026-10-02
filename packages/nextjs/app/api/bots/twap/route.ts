@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
-import type { TwapConfig } from "@sh/lambdaplex";
-import { tradingDisabledResponse, tradingEnabled } from "~~/lib/lambdaplex.server";
-import { listJobs, startJob } from "~~/lib/twapJobs.server";
+import { type TwapConfig, validateTwapConfig } from "@sh/lambdaplex";
+import { errorResponse, rejectCrossSite, tradingDisabledResponse, tradingEnabled } from "~~/lib/lambdaplex.server";
+import { JobLimitError, listJobs, startJob } from "~~/lib/twapJobs.server";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,8 @@ type StartBody = Partial<TwapConfig> & { live?: boolean };
 
 /** Starts a TWAP job. Dry runs are always allowed: they plan every slice against live data and place nothing. */
 export async function POST(req: NextRequest) {
+  const refused = rejectCrossSite(req, { requireJson: true });
+  if (refused) return refused;
   const body = (await req.json().catch(() => ({}))) as StartBody;
   const live = body.live === true;
   if (live && !tradingEnabled()) return tradingDisabledResponse();
@@ -42,9 +44,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const job = startJob(
-    { symbol: body.symbol!, side: body.side!, total: body.total!, slices, intervalSeconds, maxSlippageBps },
-    live,
-  );
-  return NextResponse.json(job, { status: 201 });
+  const config: TwapConfig = {
+    symbol: body.symbol!,
+    side: body.side!,
+    total: body.total!,
+    slices,
+    intervalSeconds,
+    maxSlippageBps,
+  };
+  const problems = validateTwapConfig(config);
+  if (problems.length) return NextResponse.json({ error: problems.join("; ") }, { status: 400 });
+
+  try {
+    return NextResponse.json(startJob(config, live), { status: 201 });
+  } catch (error) {
+    if (error instanceof JobLimitError) return NextResponse.json({ error: error.message }, { status: 429 });
+    return errorResponse(error);
+  }
 }

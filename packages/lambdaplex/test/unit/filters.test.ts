@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { marketRules, validateLimitOrder } from "../../src/filters";
+import { marketRules, validateLimitOrder, validateMarketOrder } from "../../src/filters";
 import type { ExchangeInfo } from "../../src/types";
 import exchangeInfo from "../fixtures/exchangeInfo.json";
 
@@ -39,5 +39,12 @@ describe("market rules", () => {
     expect(validateLimitOrder(rules, { side: "SELL", price: "0.07", quantity: "100" }, "0.1")).toContain(
       "Price is below the allowed band (0.08).",
     );
+  });
+
+  it("checks MARKET orders for lot size and approximate notional", () => {
+    expect(validateMarketOrder(rules, { quantity: "100" }, "0.1")).toEqual([]);
+    expect(validateMarketOrder(rules, { quantity: "1.5" }, "0.1").join(" ")).toMatch(/multiple of 1/);
+    expect(validateMarketOrder(rules, { quantity: "10" }, "0.1").join(" ")).toMatch(/below the 5 minimum/);
+    expect(validateMarketOrder(rules, { quantity: "10" })).toEqual([]);
   });
 });

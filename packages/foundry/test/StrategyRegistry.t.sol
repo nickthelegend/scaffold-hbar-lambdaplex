@@ -51,6 +51,37 @@ contract StrategyRegistryTest is Test {
 
         vm.expectRevert(StrategyRegistry.InvalidTopic.selector);
         registry.register("x", 0, "", PARAMS);
+
+        vm.expectRevert(StrategyRegistry.InvalidVenueAccount.selector);
+        registry.register("x", 1, string(new bytes(65)), PARAMS);
+
+        uint256 id = registry.register("x", 1, string(new bytes(64)), PARAMS);
+        assertEq(bytes(registry.getStrategy(id).venueAccount).length, 64);
+    }
+
+    function test_update_newTopicResetsCheckpoint() public {
+        uint256 id = _register(alice, "TWAP HBAR");
+        vm.startPrank(alice);
+        registry.anchorCheckpoint(id, 500, _hash(0xaa), 1_000);
+
+        // Same topic, new params: the checkpoint still describes this topic and is kept.
+        registry.update(id, 7_000_001, bytes32(uint256(2)));
+        assertEq(registry.latestCheckpoint(id).sequenceNumber, 500);
+
+        vm.expectEmit(address(registry));
+        emit StrategyRegistry.CheckpointReset(id, 7_000_001);
+        registry.update(id, 7_000_002, bytes32(uint256(2)));
+
+        StrategyRegistry.Checkpoint memory c = registry.latestCheckpoint(id);
+        assertEq(c.sequenceNumber, 0);
+        assertEq(c.anchoredAt, 0);
+        assertEq(c.realizedPnl, 0);
+        assertEq(c.runningHash.length, 0);
+
+        // The new topic can be anchored from its own first message, not from the old topic's sequence number.
+        registry.anchorCheckpoint(id, 1, _hash(0xbb), 0);
+        assertEq(registry.latestCheckpoint(id).sequenceNumber, 1);
+        vm.stopPrank();
     }
 
     function test_operatorOnlyActions() public {
@@ -133,6 +164,16 @@ contract StrategyRegistryTest is Test {
         assertEq(page.length, 1);
         assertEq(page[0].name, "S0");
         assertEq(registry.listStrategies(5, 10).length, 0);
+    }
+
+    function testFuzz_register_venueAccountIsBounded(string calldata venueAccount) public {
+        if (bytes(venueAccount).length > 64) {
+            vm.expectRevert(StrategyRegistry.InvalidVenueAccount.selector);
+            registry.register("x", 1, venueAccount, PARAMS);
+        } else {
+            uint256 id = registry.register("x", 1, venueAccount, PARAMS);
+            assertEq(registry.getStrategy(id).venueAccount, venueAccount);
+        }
     }
 
     function testFuzz_register_anyValidInput(string calldata name, uint64 topic, bytes32 params) public {

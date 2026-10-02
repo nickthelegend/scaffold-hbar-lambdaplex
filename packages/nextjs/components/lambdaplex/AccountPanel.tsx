@@ -20,7 +20,9 @@ export const AccountPanel = ({ symbol }: { symbol: string }) => {
 
   const cancel = async (orderId: string) => {
     try {
-      await serverApi.delete(`/api/lambdaplex/orders?symbol=${encodeURIComponent(symbol)}&orderId=${orderId}`);
+      await serverApi.delete(
+        `/api/lambdaplex/orders?symbol=${encodeURIComponent(symbol)}&orderId=${encodeURIComponent(orderId)}`,
+      );
       notification.success("Order cancelled");
       await queryClient.invalidateQueries({ queryKey: ["lambdaplex", "openOrders", symbol] });
     } catch (error) {

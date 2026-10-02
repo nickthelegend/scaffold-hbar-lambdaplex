@@ -1,7 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { type OrderSide, marketRules, validateLimitOrder } from "@sh/lambdaplex";
+import { type OrderSide, marketRules, validateLimitOrder, validateMarketOrder } from "@sh/lambdaplex";
 import { randomUUID } from "node:crypto";
-import { errorResponse, lambdaplex, tradingDisabledResponse, tradingEnabled } from "~~/lib/lambdaplex.server";
+import {
+  errorResponse,
+  lambdaplex,
+  rejectCrossSite,
+  tradingDisabledResponse,
+  tradingEnabled,
+} from "~~/lib/lambdaplex.server";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +33,11 @@ type PlaceOrderBody = {
   quantity?: string;
 };
 
-/** Places a LIMIT (GTC) or MARKET order after validating it against the market's live rules. */
+/** Places a LIMIT (GTC) or MARKET order after validating it against the market's live rules. Same-origin JSON only. */
 export async function POST(req: NextRequest) {
   if (!tradingEnabled()) return tradingDisabledResponse();
+  const refused = rejectCrossSite(req, { requireJson: true });
+  if (refused) return refused;
   const body = (await req.json().catch(() => ({}))) as PlaceOrderBody;
   const { symbol, side, type, price, quantity } = body;
 
@@ -44,14 +52,16 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    if (type === "LIMIT") {
-      const [info, book] = await Promise.all([lambdaplex.exchangeInfo(), lambdaplex.depth(symbol, 1)]);
-      const market = info.exchangeSymbols.find(s => s.symbol === symbol);
-      if (!market) return NextResponse.json({ error: `Unknown market ${symbol}` }, { status: 400 });
-      const reference = side === "BUY" ? book.asks[0]?.[0] : book.bids[0]?.[0];
-      const problems = validateLimitOrder(marketRules(market), { side, price: price!, quantity }, reference);
-      if (problems.length) return NextResponse.json({ error: problems.join(" ") }, { status: 400 });
-    }
+    const [info, book] = await Promise.all([lambdaplex.exchangeInfo(), lambdaplex.depth(symbol, 1)]);
+    const market = info.exchangeSymbols.find(s => s.symbol === symbol);
+    if (!market) return NextResponse.json({ error: `Unknown market ${symbol}` }, { status: 400 });
+    const reference = side === "BUY" ? book.asks[0]?.[0] : book.bids[0]?.[0];
+    const rules = marketRules(market);
+    const problems =
+      type === "LIMIT"
+        ? validateLimitOrder(rules, { side, price: price!, quantity }, reference)
+        : validateMarketOrder(rules, { quantity }, reference);
+    if (problems.length) return NextResponse.json({ error: problems.join(" ") }, { status: 400 });
 
     const ack = await lambdaplex.placeOrder({
       symbol,
@@ -70,6 +80,8 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   if (!tradingEnabled()) return tradingDisabledResponse();
+  const refused = rejectCrossSite(req);
+  if (refused) return refused;
   const symbol = req.nextUrl.searchParams.get("symbol");
   const orderId = req.nextUrl.searchParams.get("orderId");
   if (!symbol || !SYMBOL_RE.test(symbol) || !orderId) {

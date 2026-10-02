@@ -42,12 +42,28 @@ export const decodeTopicMessages = (messages: MirrorTopicMessage[]): TrackRecord
       : [];
   });
 
-/** Track-record entries from an HCS topic, oldest first. */
-export async function fetchTrackRecord(network: HederaNetwork, topicId: string): Promise<TrackRecordMessage[]> {
-  const res = await fetch(`${MIRROR[network]}/topics/${topicId}/messages?order=asc&limit=100`);
-  if (res.status === 404) return [];
-  if (!res.ok) throw new Error(`Mirror node: topic ${topicId} (${res.status})`);
-  const { messages } = (await res.json()) as { messages: MirrorTopicMessage[] };
+/** Absolute URL of the mirror node's `links.next` (a path such as `/api/v1/topics/…?timestamp=gt:…`), or null. */
+export const mirrorNextUrl = (network: HederaNetwork, next?: string | null): string | null =>
+  next ? `${new URL(MIRROR[network]).origin}${next}` : null;
+
+export const MAX_TRACK_RECORD_MESSAGES = 5_000;
+
+/** Track-record entries from an HCS topic, oldest first, following `links.next` up to `maxMessages`. */
+export async function fetchTrackRecord(
+  network: HederaNetwork,
+  topicId: string,
+  maxMessages = MAX_TRACK_RECORD_MESSAGES,
+): Promise<TrackRecordMessage[]> {
+  let url: string | null = `${MIRROR[network]}/topics/${topicId}/messages?order=asc&limit=100`;
+  const messages: MirrorTopicMessage[] = [];
+  while (url && messages.length < maxMessages) {
+    const res = await fetch(url);
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error(`Mirror node: topic ${topicId} (${res.status})`);
+    const page = (await res.json()) as { messages: MirrorTopicMessage[]; links?: { next?: string | null } };
+    messages.push(...page.messages);
+    url = mirrorNextUrl(network, page.links?.next);
+  }
   return decodeTopicMessages(messages);
 }
 

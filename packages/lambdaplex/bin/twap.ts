@@ -5,15 +5,17 @@
  *
  * Without --live it is a dry run: every slice is planned and validated against live market data, nothing is sent.
  * Env: LAMBDAPLEX_API_KEY, LAMBDAPLEX_PRIVATE_KEY (trading); HEDERA_OPERATOR_ID, HEDERA_OPERATOR_KEY,
- * TRACK_RECORD_TOPIC_ID, HEDERA_NETWORK (track record, optional); STRATEGY_NAME.
+ * HEDERA_OPERATOR_KEY_TYPE, TRACK_RECORD_TOPIC_ID, HEDERA_NETWORK (track record, optional); STRATEGY_NAME.
+ * Ctrl-C stops before the next slice; an order already sent is still accounted for.
  */
-import { AccountId, Client, PrivateKey } from "@hiero-ledger/sdk";
 import { config as loadEnv } from "dotenv";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { entryFromFill, runTwap, type TwapConfig } from "../src";
-import { LambdaplexClient, publishEntry } from "../src/server";
+import { entryFromFill, runTwap, type TwapConfig, validateTwapConfig } from "../src";
+import { LambdaplexClient, operatorClient, publishEntry } from "../src/server";
 
-loadEnv({ path: new URL("../../nextjs/.env.local", import.meta.url).pathname });
+// fileURLToPath, not URL.pathname: the latter keeps %20 for paths with spaces and dotenv silently finds nothing.
+loadEnv({ path: fileURLToPath(new URL("../../nextjs/.env.local", import.meta.url)) });
 loadEnv();
 
 const { values } = parseArgs({
@@ -39,21 +41,19 @@ const twap: TwapConfig = {
   intervalSeconds: Number(values.interval),
   maxSlippageBps: Number(values["slippage-bps"]),
 };
+const problems = validateTwapConfig(twap);
+if (problems.length) throw new Error(`Invalid arguments: ${problems.join("; ")}`);
 
 const lambdaplex = new LambdaplexClient({
   apiKey: process.env.LAMBDAPLEX_API_KEY,
   privateKey: process.env.LAMBDAPLEX_PRIVATE_KEY,
 });
-if (values.live && !lambdaplex.canTrade) throw new Error("--live needs LAMBDAPLEX_API_KEY and LAMBDAPLEX_PRIVATE_KEY");
+if (values.live && !lambdaplex.canTrade) {
+  throw new Error(lambdaplex.configError ?? "--live needs LAMBDAPLEX_API_KEY and LAMBDAPLEX_PRIVATE_KEY");
+}
 
 const topicId = process.env.TRACK_RECORD_TOPIC_ID;
-const hedera =
-  topicId && process.env.HEDERA_OPERATOR_ID && process.env.HEDERA_OPERATOR_KEY
-    ? (process.env.HEDERA_NETWORK === "mainnet" ? Client.forMainnet() : Client.forTestnet()).setOperator(
-        AccountId.fromString(process.env.HEDERA_OPERATOR_ID),
-        PrivateKey.fromStringECDSA(process.env.HEDERA_OPERATOR_KEY),
-      )
-    : undefined;
+const hedera = topicId ? operatorClient(process.env) : undefined;
 const strategy = process.env.STRATEGY_NAME ?? `twap-${twap.symbol.toLowerCase()}`;
 
 console.log(
@@ -61,19 +61,36 @@ console.log(
 );
 if (!hedera) console.log("Track record disabled (set TRACK_RECORD_TOPIC_ID and HEDERA_OPERATOR_ID/KEY to enable)");
 
+const stop = new AbortController();
+process.once("SIGINT", () => {
+  console.log("Stopping after the current slice…");
+  stop.abort();
+});
+
 try {
   const result = await runTwap(lambdaplex, twap, {
     dryRun: !values.live,
+    signal: stop.signal,
     onEvent: async event => {
       console.log(JSON.stringify(event));
       if (event.type === "fill" && hedera && topicId) {
         const entry = entryFromFill(strategy, twap.symbol, twap.side, event.clientOrderId, event.fill);
-        const { sequenceNumber, transactionId } = await publishEntry(hedera, topicId, entry);
-        console.log(`  → track record #${sequenceNumber} on ${topicId} (${transactionId})`);
+        try {
+          const { sequenceNumber, transactionId } = await publishEntry(hedera, topicId, entry);
+          console.log(`  → track record #${sequenceNumber} on ${topicId} (${transactionId})`);
+        } catch (error) {
+          // The fill happened regardless; a publishing failure must not change what the bot trades.
+          console.error(`  ✗ track record publish failed: ${error instanceof Error ? error.message : error}`);
+        }
       }
     },
   });
   console.log(`Filled ${result.filledBase} base for ${result.filledQuote} quote; unfilled ${result.unfilled}`);
+  if (result.stopReason) console.log(`Stopped early: ${result.stopReason}`);
+  if (result.unresolved !== "0") {
+    console.error(`UNRESOLVED ${result.unresolved}: check open orders and fills on Lambdaplex before trading it again`);
+    process.exitCode = 2;
+  }
 } finally {
   hedera?.close();
 }

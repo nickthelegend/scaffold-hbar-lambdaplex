@@ -1,0 +1,29 @@
+{
+  "name": "lambdaplex-terminal-static",
+  "description": "Structure and key-safety invariants.",
+  "jsonAssertions": [
+    { "file": "package.json", "path": "packageManager", "equals": "yarn@3.2.3" },
+    { "file": "template.json", "path": "name", "equals": "lambdaplex-terminal" }
+  ],
+  "fileAssertions": {
+    "required": [
+      "README.md",
+      "AGENTS.md",
+      "LICENCE",
+      "template.json",
+      "packages/lambdaplex/src/signing.ts",
+      "packages/lambdaplex/src/client.ts",
+      "packages/lambdaplex/src/twap.ts",
+      "packages/nextjs/lib/lambdaplex.server.ts",
+      "packages/nextjs/app/api/lambdaplex/orders/route.ts",
+      "packages/foundry/contracts/StrategyRegistry.sol",
+      ".harness/spec.yaml"
+    ],
+    "forbidden": [".env", "packages/nextjs/.env", "packages/nextjs/.env.local", "packages/foundry/.env", "packages/hardhat"]
+  },
+  "textAssertions": [
+    { "file": "packages/nextjs/lib/lambdaplex.server.ts", "contains": ["server-only", "TRADING_ENABLED"] },
+    { "file": "packages/lambdaplex/src/index.ts", "notContains": ["./client", "./signing", "./hcs"] },
+    { "file": "README.md", "contains": ["npm create scaffold-hbar@latest", "TRADING_ENABLED", "Proof"] }
+  ]
+}

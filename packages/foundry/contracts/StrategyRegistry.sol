@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.28;
+
+/// @title StrategyRegistry
+/// @notice On-chain directory of trading strategies and their verifiable track records.
+/// @dev A strategy's trades happen on Lambdaplex and every settled fill is published to an HCS topic that only the
+///      operator can write to. This registry binds the pieces together where other contracts and frontends can read
+///      them: who operates the strategy, which HCS topic holds its record, which Lambdaplex account trades, and a hash
+///      of its parameters. Operators can anchor checkpoints of the topic (sequence number + running hash + reported
+///      PnL) so a consumer, such as a copy-trading vault, can reference the record "as of" an exact HCS message.
+contract StrategyRegistry {
+    struct Strategy {
+        address operator;
+        bool active;
+        uint64 topicNum; // HCS topic 0.0.<topicNum>
+        uint64 createdAt;
+        bytes32 paramsHash; // keccak256 of the strategy's canonical JSON parameters
+        string name;
+        string venueAccount; // Lambdaplex trading account, e.g. "0.0.123456"
+    }
+
+    struct Checkpoint {
+        uint64 sequenceNumber; // last HCS sequence number covered
+        uint64 anchoredAt;
+        int128 realizedPnl; // quote units with 6 decimals, as reported by the operator
+        bytes runningHash; // HCS topic running hash (48 bytes) after `sequenceNumber`
+    }
+
+    uint256 internal constant MAX_NAME_LENGTH = 64;
+    uint256 internal constant RUNNING_HASH_LENGTH = 48;
+
+    Strategy[] internal _strategies;
+    mapping(uint256 => Checkpoint) internal _latestCheckpoint;
+    mapping(address => uint256[]) internal _byOperator;
+
+    event StrategyRegistered(uint256 indexed id, address indexed operator, uint64 topicNum, string name);
+    event StrategyUpdated(uint256 indexed id, uint64 topicNum, bytes32 paramsHash);
+    event StrategyStatusChanged(uint256 indexed id, bool active);
+    event OperatorTransferred(uint256 indexed id, address indexed previousOperator, address indexed newOperator);
+    event CheckpointAnchored(uint256 indexed id, uint64 sequenceNumber, int128 realizedPnl, bytes runningHash);
+
+    error UnknownStrategy(uint256 id);
+    error NotOperator(uint256 id);
+    error InvalidName();
+    error InvalidTopic();
+    error InvalidOperator();
+    error InvalidRunningHash();
+    error StaleCheckpoint(uint64 latest, uint64 proposed);
+
+    modifier onlyOperator(uint256 id) {
+        if (id >= _strategies.length) revert UnknownStrategy(id);
+        if (_strategies[id].operator != msg.sender) revert NotOperator(id);
+        _;
+    }
+
+    function register(string calldata name, uint64 topicNum, string calldata venueAccount, bytes32 paramsHash)
+        external
+        returns (uint256 id)
+    {
+        if (bytes(name).length == 0 || bytes(name).length > MAX_NAME_LENGTH) revert InvalidName();
+        if (topicNum == 0) revert InvalidTopic();
+
+        id = _strategies.length;
+        _strategies.push(
+            Strategy({
+                operator: msg.sender,
+                active: true,
+                topicNum: topicNum,
+                createdAt: uint64(block.timestamp),
+                paramsHash: paramsHash,
+                name: name,
+                venueAccount: venueAccount
+            })
+        );
+        _byOperator[msg.sender].push(id);
+        emit StrategyRegistered(id, msg.sender, topicNum, name);
+    }
+
+    function update(uint256 id, uint64 topicNum, bytes32 paramsHash) external onlyOperator(id) {
+        if (topicNum == 0) revert InvalidTopic();
+        Strategy storage strategy = _strategies[id];
+        strategy.topicNum = topicNum;
+        strategy.paramsHash = paramsHash;
+        emit StrategyUpdated(id, topicNum, paramsHash);
+    }
+
+    function setActive(uint256 id, bool active) external onlyOperator(id) {
+        _strategies[id].active = active;
+        emit StrategyStatusChanged(id, active);
+    }
+
+    function transferOperator(uint256 id, address newOperator) external onlyOperator(id) {
+        if (newOperator == address(0)) revert InvalidOperator();
+        _strategies[id].operator = newOperator;
+        _byOperator[newOperator].push(id);
+        emit OperatorTransferred(id, msg.sender, newOperator);
+    }
+
+    /// @notice Anchors the strategy's HCS record up to `sequenceNumber`. Checkpoints only move forward.
+    function anchorCheckpoint(uint256 id, uint64 sequenceNumber, bytes calldata runningHash, int128 realizedPnl)
+        external
+        onlyOperator(id)
+    {
+        if (runningHash.length != RUNNING_HASH_LENGTH) revert InvalidRunningHash();
+        uint64 latest = _latestCheckpoint[id].sequenceNumber;
+        if (sequenceNumber <= latest) revert StaleCheckpoint(latest, sequenceNumber);
+
+        _latestCheckpoint[id] = Checkpoint({
+            sequenceNumber: sequenceNumber,
+            anchoredAt: uint64(block.timestamp),
+            realizedPnl: realizedPnl,
+            runningHash: runningHash
+        });
+        emit CheckpointAnchored(id, sequenceNumber, realizedPnl, runningHash);
+    }
+
+    function getStrategy(uint256 id) external view returns (Strategy memory) {
+        if (id >= _strategies.length) revert UnknownStrategy(id);
+        return _strategies[id];
+    }
+
+    function latestCheckpoint(uint256 id) external view returns (Checkpoint memory) {
+        if (id >= _strategies.length) revert UnknownStrategy(id);
+        return _latestCheckpoint[id];
+    }
+
+    function strategyCount() external view returns (uint256) {
+        return _strategies.length;
+    }
+
+    /// @notice Ids ever operated by `operator`, including ones since transferred away (check `operator` on each).
+    function strategiesOf(address operator) external view returns (uint256[] memory) {
+        return _byOperator[operator];
+    }
+
+    /// @notice A page of strategies, newest first, for frontends.
+    function listStrategies(uint256 offset, uint256 limit) external view returns (Strategy[] memory page) {
+        uint256 total = _strategies.length;
+        if (offset >= total) return new Strategy[](0);
+        uint256 count = total - offset < limit ? total - offset : limit;
+        page = new Strategy[](count);
+        for (uint256 i; i < count; ++i) {
+            page[i] = _strategies[total - 1 - offset - i];
+        }
+    }
+}

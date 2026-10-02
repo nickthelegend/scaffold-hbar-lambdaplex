@@ -1,0 +1,31 @@
+{
+  "name": "@sh/lambdaplex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typed Lambdaplex client, request signing, TWAP executor and HCS track record",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"bin/**/*.ts\"",
+    "lint": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"bin/**/*.ts\" && tsc --noEmit",
+    "test": "vitest run test/unit",
+    "test:live": "vitest run test/live",
+    "twap": "tsx bin/twap.ts",
+    "topic:create": "tsx bin/createTopic.ts"
+  },
+  "dependencies": {
+    "@hiero-ledger/sdk": "^2.80.0",
+    "dotenv": "~16.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.8",
+    "prettier": "^3.5.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
+  }
+}

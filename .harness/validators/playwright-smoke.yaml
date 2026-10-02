@@ -1,0 +1,24 @@
+name: lambdaplex-terminal-smoke
+server:
+  command: yarn next:dev
+  url: http://localhost:3000
+  timeoutMs: 180000
+defaults:
+  timeoutMs: 45000
+  failOnConsoleError: false
+routes:
+  - name: markets
+    path: /
+  - name: trade
+    path: /trade/HBAR-USDC
+  - name: bots
+    path: /bots
+  - name: registry
+    path: /registry
+  - name: health
+    path: /api/health
+forbidden:
+  visibleText:
+    - Application error
+    - Unhandled Runtime Error
+    - Could not reach Lambdaplex

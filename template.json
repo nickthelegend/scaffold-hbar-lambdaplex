@@ -1,0 +1,56 @@
+{
+  "name": "lambdaplex-terminal",
+  "description": "Trade Lambdaplex, Hedera's order-book exchange, from your own app: live books and trades over REST and WebSocket, Ed25519-signed orders from server routes, a TWAP bot that waits for settlement-final fills, and a verifiable track record on HCS indexed by an on-chain StrategyRegistry.",
+  "version": "1.0.0",
+  "create-scaffold-hbar": {
+    "capabilities": {
+      "frontend": ["nextjs-app"],
+      "solidityFramework": ["foundry"],
+      "packageManager": ["yarn"]
+    },
+    "defaults": {
+      "frontend": "nextjs-app",
+      "solidityFramework": "foundry",
+      "packageManager": "yarn"
+    },
+    "requirements": {
+      "node": ">=20.18.3"
+    },
+    "envVars": [
+      { "key": "LAMBDAPLEX_API_KEY", "description": "packages/nextjs/.env.local: Lambdaplex API key id (server only)." },
+      { "key": "LAMBDAPLEX_PRIVATE_KEY", "description": "packages/nextjs/.env.local: the API key's Ed25519 private key (server only)." },
+      { "key": "TRADING_ENABLED", "description": "packages/nextjs/.env.local: set to true to allow order placement." },
+      { "key": "HEDERA_OPERATOR_ID", "description": "packages/nextjs/.env.local: ECDSA operator that publishes the HCS track record." },
+      { "key": "HEDERA_OPERATOR_KEY", "description": "packages/nextjs/.env.local: that operator's private key (server only)." },
+      { "key": "TRACK_RECORD_TOPIC_ID", "description": "packages/nextjs/.env.local: HCS topic for the track record (yarn lambdaplex:topic:create)." }
+    ],
+    "outro": {
+      "sections": [
+        {
+          "steps": [
+            {
+              "text": "Market data needs no keys: start the app and open a market to see Lambdaplex's live book."
+            }
+          ]
+        },
+        {
+          "title": "Explore read-only",
+          "steps": [
+            { "label": "Start the terminal", "command": "{run:next:dev}" },
+            { "label": "Plan a TWAP against the live book (no orders)", "command": "{run:lambdaplex:twap} --total 10 --slices 2" },
+            { "label": "Run the SDK tests (signing vectors, rules, TWAP planning)", "command": "{run:lambdaplex:test}" }
+          ]
+        },
+        {
+          "title": "Trade and publish a track record",
+          "steps": [
+            { "text": "Copy packages/nextjs/.env.example to packages/nextjs/.env.local and add your Lambdaplex API key." },
+            { "label": "Create the HCS track-record topic", "command": "{run:lambdaplex:topic:create}" },
+            { "label": "Deploy the StrategyRegistry to Hedera testnet", "command": "{run:foundry:deploy} --network hedera_testnet" },
+            { "label": "Run a live TWAP", "command": "{run:lambdaplex:twap} --total 10 --slices 2 --live" }
+          ]
+        }
+      ]
+    }
+  }
+}

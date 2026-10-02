@@ -1,0 +1,35 @@
+schemaVersion: 2
+
+name: lambdaplex-terminal
+description: >-
+  Lambdaplex trading terminal and TWAP bot kit. Extend the SDK, routes or UI without leaking keys to the browser,
+  breaking request signing, or publishing unsettled fills to the HCS track record.
+
+agent: claude
+prd: .harness/prd.md
+
+baseline:
+  commands:
+    - name: install
+      command: yarn install
+      timeoutMs: 900000
+    - name: sdk
+      command: yarn lambdaplex:test
+      timeoutMs: 300000
+    - name: build
+      command: yarn next:build
+      timeoutMs: 600000
+
+validators:
+  static: .harness/validators/static.json
+  commands: .harness/validators/yarn.json
+  playwright: .harness/validators/playwright-smoke.yaml
+
+contract: .harness/acceptance-contract.json
+validator:
+  enabled: true
+
+requiredFiles:
+  - packages/lambdaplex/src/signing.ts
+  - packages/lambdaplex/test/unit/signing.test.ts
+  - packages/foundry/contracts/StrategyRegistry.sol

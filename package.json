@@ -1,0 +1,58 @@
+{
+  "name": "lambdaplex-terminal",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "packages/foundry",
+      "packages/lambdaplex",
+      "packages/nextjs"
+    ]
+  },
+  "scripts": {
+    "format": "yarn next:format && yarn foundry:format && yarn lambdaplex:format",
+    "foundry:account": "yarn workspace @sh/foundry account",
+    "foundry:account:generate": "yarn workspace @sh/foundry account:generate",
+    "foundry:account:import": "yarn workspace @sh/foundry account:import",
+    "foundry:account:reveal-pk": "yarn workspace @sh/foundry account:reveal-pk",
+    "foundry:clean": "yarn workspace @sh/foundry clean",
+    "foundry:compile": "yarn workspace @sh/foundry compile",
+    "foundry:deploy": "yarn workspace @sh/foundry deploy",
+    "foundry:format": "yarn workspace @sh/foundry format",
+    "foundry:lint": "yarn workspace @sh/foundry lint",
+    "foundry:lint-staged": "yarn workspace @sh/foundry lint-staged",
+    "foundry:test": "yarn workspace @sh/foundry test",
+    "foundry:verify:mainnet": "yarn workspace @sh/foundry verify:mainnet",
+    "foundry:verify:testnet": "yarn workspace @sh/foundry verify:testnet",
+    "harness:doctor": "npx --yes hedera-harness@1.2.2 doctor",
+    "harness:run": "npx --yes hedera-harness@1.2.2 run",
+    "harness:validate": "npx --yes hedera-harness@1.2.2 validate",
+    "lambdaplex:format": "yarn workspace @sh/lambdaplex format",
+    "lambdaplex:lint": "yarn workspace @sh/lambdaplex lint",
+    "lambdaplex:test": "yarn workspace @sh/lambdaplex test",
+    "lambdaplex:test:live": "yarn workspace @sh/lambdaplex test:live",
+    "lambdaplex:topic:create": "yarn workspace @sh/lambdaplex topic:create",
+    "lambdaplex:twap": "yarn workspace @sh/lambdaplex twap",
+    "lint": "yarn next:lint && yarn foundry:lint && yarn lambdaplex:lint",
+    "lint-staged": "lint-staged",
+    "next:build": "yarn workspace @sh/nextjs build",
+    "next:check-types": "yarn workspace @sh/nextjs check-types",
+    "next:dev": "yarn workspace @sh/nextjs dev",
+    "next:format": "yarn workspace @sh/nextjs format",
+    "next:lint": "yarn workspace @sh/nextjs lint",
+    "next:serve": "yarn workspace @sh/nextjs serve",
+    "next:start": "yarn workspace @sh/nextjs start",
+    "next:test": "yarn workspace @sh/nextjs test",
+    "postinstall": "husky",
+    "precommit": "lint-staged",
+    "test": "yarn foundry:test && yarn lambdaplex:test && yarn next:test"
+  },
+  "packageManager": "yarn@3.2.3",
+  "devDependencies": {
+    "husky": "^9.1.6",
+    "lint-staged": "^15.2.10"
+  },
+  "engines": {
+    "node": ">=20.18.3"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "name": "lambdaplex-terminal",
+  "assertions": [
+    {
+      "id": "C1",
+      "journey": "Visitor browses markets",
+      "route": "/",
+      "severity": "critical",
+      "statement": "Without keys or a wallet, the home page lists Lambdaplex markets including HBAR/USDC with a numeric last price and a Trade button.",
+      "howToVerify": "Open /. Confirm a table row for HBAR/USDC with a price and a Trade link to /trade/HBAR-USDC.",
+      "walletRequired": false,
+      "verifiableWithoutCredentials": true
+    },
+    {
+      "id": "C2",
+      "journey": "Visitor sees the live book",
+      "route": "/trade/HBAR-USDC",
+      "severity": "critical",
+      "statement": "The trade page shows bids and asks with a spread, a trade tape, a price chart, and a 'Live stream' or 'Polling' badge.",
+      "howToVerify": "Open /trade/HBAR-USDC, wait 10 s, confirm order book rows (or 'No bids'/'No asks'), the spread line and the badge.",
+      "walletRequired": false,
+      "verifiableWithoutCredentials": true
+    },
+    {
+      "id": "C3",
+      "journey": "Order validation",
+      "route": "/trade/HBAR-USDC",
+      "severity": "major",
+      "statement": "Entering a price that is not a multiple of the tick, or a total below 5 USDC, shows the specific rule broken and keeps the submit button disabled.",
+      "howToVerify": "Type price 0.1000005 and quantity 10; confirm messages about tick size and minimum order value.",
+      "walletRequired": false,
+      "verifiableWithoutCredentials": true
+    },
+    {
+      "id": "C4",
+      "journey": "Dry-run TWAP",
+      "route": "/bots",
+      "severity": "critical",
+      "statement": "Clicking 'Dry run' creates a job whose log shows each slice planned or rolled over against live market data, and no order is placed.",
+      "howToVerify": "Open /bots, click Dry run, wait 10 s, confirm a job card with a 'dry run' badge and at least one slice log line.",
+      "walletRequired": false,
+      "verifiableWithoutCredentials": true
+    },
+    {
+      "id": "C5",
+      "journey": "Read-only safety",
+      "route": "/trade/HBAR-USDC",
+      "severity": "critical",
+      "statement": "With TRADING_ENABLED unset, the order button is disabled, the page explains read-only mode, and POST /api/lambdaplex/orders returns 403.",
+      "howToVerify": "Check the banner and disabled button; send POST /api/lambdaplex/orders and confirm status 403.",
+      "walletRequired": false,
+      "verifiableWithoutCredentials": true
+    }
+  ]
+}

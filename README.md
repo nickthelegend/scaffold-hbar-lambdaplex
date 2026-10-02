@@ -1,6 +1,6 @@
 # Lambdaplex Terminal: trade Hedera's order book from your own app
 
-[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://terminal-production-2a39.up.railway.app>**
+[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://terminal-production-2a39.up.railway.app>** · **[Demo video (67s)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/releases/download/demo-video/lambdaplex-terminal-demo.mp4)**
 
 A Scaffold-HBAR template for building on [Lambdaplex](https://www.lambdaplex.io), the Hedera-native order-book
 exchange. It gives you:

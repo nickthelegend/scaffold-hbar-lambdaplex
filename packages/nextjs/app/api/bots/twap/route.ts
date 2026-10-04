@@ -1,13 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server";
 import type { TwapConfig } from "@sh/lambdaplex";
 import { errorResponse, rejectCrossSite, tradingDisabledResponse, tradingEnabled } from "~~/lib/lambdaplex.server";
-import { JobLimitError, listJobs, startJob } from "~~/lib/twapJobs.server";
+import { JobLimitError, jobsRunInline, listJobs, runInlineDryRun, startJob } from "~~/lib/twapJobs.server";
 import { webTwapProblems } from "~~/utils/lambdaplex/twapForm";
 
 export const dynamic = "force-dynamic";
+// An inline dry run (serverless hosting) prices up to 50 slices in one request.
+export const maxDuration = 60;
 
 export function GET() {
-  return NextResponse.json(listJobs());
+  // Serverless instances share no memory: the jobs a visitor started come back in their POST responses instead.
+  return NextResponse.json(jobsRunInline() ? [] : listJobs());
 }
 
 type StartBody = Partial<TwapConfig> & { live?: boolean };
@@ -34,6 +37,19 @@ export async function POST(req: NextRequest) {
   // Same checks, same wording as the form, so a request that bypasses the UI gets the same explanation.
   const problems = webTwapProblems(config);
   if (problems.length) return NextResponse.json({ error: problems.join(" ") }, { status: 400 });
+
+  if (jobsRunInline()) {
+    if (live) {
+      return NextResponse.json(
+        {
+          error:
+            "Live TWAPs run for minutes in the background, which this serverless deployment can't host. Run `yarn lambdaplex:twap` or self-host with `yarn next:serve`.",
+        },
+        { status: 501 },
+      );
+    }
+    return NextResponse.json(await runInlineDryRun(config), { status: 201 });
+  }
 
   try {
     return NextResponse.json(startJob(config, live), { status: 201 });

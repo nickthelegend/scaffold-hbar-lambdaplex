@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { configError, lambdaplex, trackRecordTopicId, tradingEnabled } from "~~/lib/lambdaplex.server";
+import { jobsRunInline } from "~~/lib/twapJobs.server";
 
 export const dynamic = "force-dynamic";
 
@@ -11,5 +12,6 @@ export function GET() {
     configError: configError() ?? null,
     trackRecordTopicId: trackRecordTopicId() ?? null,
     trackRecordNetwork: process.env.HEDERA_NETWORK === "mainnet" ? "mainnet" : "testnet",
+    twapJobs: jobsRunInline() ? "inline" : "background",
   });
 }

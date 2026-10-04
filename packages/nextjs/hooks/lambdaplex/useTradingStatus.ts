@@ -8,6 +8,8 @@ export type TradingStatus = {
   configError: string | null;
   trackRecordTopicId: string | null;
   trackRecordNetwork: "testnet" | "mainnet";
+  /** "inline" on serverless hosting: dry runs complete within the request and live jobs are unavailable. */
+  twapJobs: "inline" | "background";
 };
 
 export const useTradingStatus = () =>

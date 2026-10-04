@@ -107,3 +107,39 @@ export function startJob(config: TwapConfig, live: boolean): TwapJob {
 
   return job;
 }
+
+/**
+ * Serverless hosts (Vercel) end a function when its response is sent and don't share memory between invocations, so
+ * the background registry above can't work there. In that mode a dry run plans every slice in the request itself
+ * (intervals collapsed: each slice is priced against the book as it is now) and returns the finished job, and live
+ * jobs are refused. Set TWAP_JOBS=background to force the registry, e.g. on a long-running `yarn next:serve`.
+ */
+export const jobsRunInline = () =>
+  process.env.TWAP_JOBS === "inline" || (Boolean(process.env.VERCEL) && process.env.TWAP_JOBS !== "background");
+
+export async function runInlineDryRun(config: TwapConfig): Promise<TwapJob> {
+  const job: TwapJob = {
+    id: randomUUID().slice(0, 8),
+    config,
+    live: false,
+    status: "running",
+    startedAt: Date.now(),
+    log: [],
+  };
+  try {
+    await runTwap(lambdaplex, config, {
+      dryRun: true,
+      runId: job.id,
+      sleep: async () => undefined,
+      onEvent: event => void job.log.push({ at: Date.now(), event }),
+    });
+    job.status = "done";
+  } catch (error) {
+    job.status = "failed";
+    job.log.push({
+      at: Date.now(),
+      event: { type: "error", error: error instanceof Error ? error.message : String(error) },
+    });
+  }
+  return job;
+}

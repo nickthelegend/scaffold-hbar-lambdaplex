@@ -80,13 +80,21 @@ export const TwapPanel = () => {
     queryFn: () => serverApi.get<Job[]>("/api/bots/twap"),
     refetchInterval: query => (query.state.data?.some(j => j.status === "running") ? 2_000 : 15_000),
   });
+  // On serverless hosting a dry run finishes inside its request and the server keeps nothing, so the jobs this
+  // visitor started live here, merged with whatever the server lists.
+  const [ownJobs, setOwnJobs] = useState<Job[]>([]);
+  const allJobs = [...ownJobs.filter(own => !jobs.data?.some(j => j.id === own.id)), ...(jobs.data ?? [])].sort(
+    (a, b) => b.startedAt - a.startedAt,
+  );
+  const inline = status?.twapJobs === "inline";
 
   const start = async () => {
     if (inFlight.current || problems.length > 0) return;
     inFlight.current = true;
     setStarting(true);
     try {
-      await serverApi.post("/api/bots/twap", config);
+      const job = await serverApi.post<Job>("/api/bots/twap", config);
+      setOwnJobs(previous => [job, ...previous].slice(0, 20));
       await queryClient.invalidateQueries({ queryKey: ["twap-jobs"] });
     } catch (error) {
       notification.error(error instanceof Error ? error.message : "Could not start the TWAP");
@@ -151,13 +159,20 @@ export const TwapPanel = () => {
             type="checkbox"
             className="toggle toggle-sm"
             checked={form.live}
-            disabled={!status?.tradingEnabled}
+            disabled={!status?.tradingEnabled || inline}
             onChange={e => setForm({ ...form, live: e.target.checked })}
           />
           Live (places real orders)
         </label>
-        {!status?.tradingEnabled && (
-          <p className="m-0 text-xs text-base-content/60">Dry runs only: trading is disabled on this deployment.</p>
+        {inline ? (
+          <p className="m-0 text-xs text-base-content/60">
+            Dry runs only on this serverless deployment: every slice is priced against the book as it is now. Live TWAPs
+            need a long-running server (<code>yarn next:serve</code>) or the <code>yarn lambdaplex:twap</code> CLI.
+          </p>
+        ) : (
+          !status?.tradingEnabled && (
+            <p className="m-0 text-xs text-base-content/60">Dry runs only: trading is disabled on this deployment.</p>
+          )
         )}
         {problems.length > 0 && (
           <ul className="m-0 pl-4 text-sm text-error" aria-live="polite">
@@ -184,12 +199,12 @@ export const TwapPanel = () => {
       <section className="flex flex-col gap-3">
         <h2 className="m-0 text-lg font-semibold">Jobs</h2>
         {jobs.error && <p className="m-0 text-sm text-error">Could not load jobs: {jobs.error.message}</p>}
-        {!jobs.error && !jobs.isLoading && !jobs.data?.length && (
+        {!jobs.error && !jobs.isLoading && !allJobs.length && (
           <p className="m-0 text-sm text-base-content/60">
             No jobs yet. Start a dry run to see each slice planned against the live book.
           </p>
         )}
-        {jobs.data?.map(job => (
+        {allJobs.map(job => (
           <article key={job.id} className="rounded-2xl border border-base-300 bg-base-100 p-4">
             <header className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">

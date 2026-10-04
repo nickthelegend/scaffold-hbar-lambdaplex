@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { type TwapConfig, validateTwapConfig } from "@sh/lambdaplex";
+import type { TwapConfig } from "@sh/lambdaplex";
 import { errorResponse, rejectCrossSite, tradingDisabledResponse, tradingEnabled } from "~~/lib/lambdaplex.server";
 import { JobLimitError, listJobs, startJob } from "~~/lib/twapJobs.server";
+import { webTwapProblems } from "~~/utils/lambdaplex/twapForm";
 
 export const dynamic = "force-dynamic";
 
@@ -15,45 +16,24 @@ type StartBody = Partial<TwapConfig> & { live?: boolean };
 export async function POST(req: NextRequest) {
   const refused = rejectCrossSite(req, { requireJson: true });
   if (refused) return refused;
-  const body = (await req.json().catch(() => ({}))) as StartBody;
+  const body = (await req.json().catch(() => null)) as StartBody | null;
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Send the TWAP settings as a JSON object." }, { status: 400 });
+  }
   const live = body.live === true;
   if (live && !tradingEnabled()) return tradingDisabledResponse();
 
-  const slices = Number(body.slices);
-  const intervalSeconds = Number(body.intervalSeconds);
-  const maxSlippageBps = Number(body.maxSlippageBps);
-  const valid =
-    typeof body.symbol === "string" &&
-    /^[A-Za-z0-9]{1,20}-[A-Za-z0-9]{1,20}$/.test(body.symbol) &&
-    (body.side === "BUY" || body.side === "SELL") &&
-    typeof body.total === "string" &&
-    /^\d+(\.\d+)?$/.test(body.total) &&
-    Number.isInteger(slices) &&
-    slices >= 1 &&
-    slices <= 50 &&
-    Number.isInteger(intervalSeconds) &&
-    intervalSeconds >= 5 &&
-    intervalSeconds <= 3600 &&
-    Number.isInteger(maxSlippageBps) &&
-    maxSlippageBps >= 0 &&
-    maxSlippageBps <= 500;
-  if (!valid) {
-    return NextResponse.json(
-      { error: "Invalid TWAP: symbol, side, total, slices 1-50, interval 5-3600 s, slippage 0-500 bps" },
-      { status: 400 },
-    );
-  }
-
   const config: TwapConfig = {
-    symbol: body.symbol!,
-    side: body.side!,
-    total: body.total!,
-    slices,
-    intervalSeconds,
-    maxSlippageBps,
+    symbol: typeof body.symbol === "string" ? body.symbol : "",
+    side: body.side as TwapConfig["side"], // validated below
+    total: typeof body.total === "string" ? body.total : "",
+    slices: Number(body.slices),
+    intervalSeconds: Number(body.intervalSeconds),
+    maxSlippageBps: Number(body.maxSlippageBps),
   };
-  const problems = validateTwapConfig(config);
-  if (problems.length) return NextResponse.json({ error: problems.join("; ") }, { status: 400 });
+  // Same checks, same wording as the form, so a request that bypasses the UI gets the same explanation.
+  const problems = webTwapProblems(config);
+  if (problems.length) return NextResponse.json({ error: problems.join(" ") }, { status: 400 });
 
   try {
     return NextResponse.json(startJob(config, live), { status: 201 });

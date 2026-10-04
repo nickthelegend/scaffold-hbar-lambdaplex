@@ -38,7 +38,10 @@ export async function POST(req: NextRequest) {
   if (!tradingEnabled()) return tradingDisabledResponse();
   const refused = rejectCrossSite(req, { requireJson: true });
   if (refused) return refused;
-  const body = (await req.json().catch(() => ({}))) as PlaceOrderBody;
+  const body = (await req.json().catch(() => null)) as PlaceOrderBody | null;
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Send the order as a JSON object." }, { status: 400 });
+  }
   const { symbol, side, type, price, quantity } = body;
 
   if (!symbol || !SYMBOL_RE.test(symbol)) return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });

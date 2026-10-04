@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { OrderSide } from "@sh/lambdaplex";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTradingStatus } from "~~/hooks/lambdaplex/useTradingStatus";
@@ -8,6 +8,7 @@ import type { TwapJob as Job, JobLogEntry } from "~~/lib/twapJobs.server";
 import { serverApi } from "~~/utils/lambdaplex/api";
 import { formatTime } from "~~/utils/lambdaplex/format";
 import { hashscan } from "~~/utils/lambdaplex/hedera";
+import { webTwapProblems } from "~~/utils/lambdaplex/twapForm";
 import { notification } from "~~/utils/scaffold-hbar";
 
 type LogEvent = JobLogEntry["event"];
@@ -62,6 +63,17 @@ export const TwapPanel = () => {
     live: false,
   });
   const [starting, setStarting] = useState(false);
+  // A ref, not state, blocks a double-click from starting the same TWAP twice (a live one places real orders).
+  const inFlight = useRef(false);
+
+  const config = {
+    ...form,
+    slices: Number(form.slices),
+    intervalSeconds: Number(form.intervalSeconds),
+    maxSlippageBps: Number(form.maxSlippageBps),
+  };
+  // The same checks the API route runs, so a bad config is explained before it is sent.
+  const problems = webTwapProblems(config);
 
   const jobs = useQuery({
     queryKey: ["twap-jobs"],
@@ -70,18 +82,16 @@ export const TwapPanel = () => {
   });
 
   const start = async () => {
+    if (inFlight.current || problems.length > 0) return;
+    inFlight.current = true;
     setStarting(true);
     try {
-      await serverApi.post("/api/bots/twap", {
-        ...form,
-        slices: Number(form.slices),
-        intervalSeconds: Number(form.intervalSeconds),
-        maxSlippageBps: Number(form.maxSlippageBps),
-      });
+      await serverApi.post("/api/bots/twap", config);
       await queryClient.invalidateQueries({ queryKey: ["twap-jobs"] });
     } catch (error) {
       notification.error(error instanceof Error ? error.message : "Could not start the TWAP");
     } finally {
+      inFlight.current = false;
       setStarting(false);
     }
   };
@@ -149,7 +159,18 @@ export const TwapPanel = () => {
         {!status?.tradingEnabled && (
           <p className="m-0 text-xs text-base-content/60">Dry runs only: trading is disabled on this deployment.</p>
         )}
-        <button type="submit" className={`btn ${form.live ? "btn-warning" : "btn-primary"}`} disabled={starting}>
+        {problems.length > 0 && (
+          <ul className="m-0 pl-4 text-sm text-error" aria-live="polite">
+            {problems.map(p => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+        )}
+        <button
+          type="submit"
+          className={`btn ${form.live ? "btn-warning" : "btn-primary"}`}
+          disabled={starting || problems.length > 0}
+        >
           {starting ? (
             <span className="loading loading-spinner loading-sm" />
           ) : form.live ? (

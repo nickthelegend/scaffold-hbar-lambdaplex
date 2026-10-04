@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { type MarketRules, type OrderSide, mul, validateLimitOrder } from "@sh/lambdaplex";
+import { useEffect, useRef, useState } from "react";
+import { type MarketRules, type OrderSide, mul, validateLimitOrder, validateMarketOrder } from "@sh/lambdaplex";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTradingStatus } from "~~/hooks/lambdaplex/useTradingStatus";
 import { serverApi } from "~~/utils/lambdaplex/api";
@@ -22,6 +22,9 @@ export const OrderForm = ({ rules, bestBid, bestAsk, pickedPrice }: Props) => {
   const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // A ref, not state, blocks re-entry: a double-click submits twice before React re-renders the disabled button,
+  // and here that would place two real orders.
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (pickedPrice) setPrice(pickedPrice);
@@ -30,11 +33,21 @@ export const OrderForm = ({ rules, bestBid, bestAsk, pickedPrice }: Props) => {
   const reference = side === "BUY" ? bestAsk : bestBid;
   const numeric = (v: string) => /^\d+(\.\d+)?$/.test(v);
   const ready = numeric(quantity) && (type === "MARKET" || numeric(price));
-  const problems = ready && type === "LIMIT" ? validateLimitOrder(rules, { side, price, quantity }, reference) : [];
+  const formatProblems = [
+    ...(type === "LIMIT" && price && !numeric(price) ? ["Enter the price as a plain number, e.g. 0.1025."] : []),
+    ...(quantity && !numeric(quantity) ? ["Enter the quantity as a plain number, e.g. 100."] : []),
+  ];
+  const problems = !ready
+    ? formatProblems
+    : type === "LIMIT"
+      ? validateLimitOrder(rules, { side, price, quantity }, reference)
+      : validateMarketOrder(rules, { quantity }, reference);
   const notional = ready && type === "LIMIT" ? mul(price, quantity) : undefined;
   const disabled = !status?.tradingEnabled;
 
   const submit = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setSubmitting(true);
     try {
       const ack = await serverApi.post<{ orderId: string }>("/api/lambdaplex/orders", {
@@ -50,6 +63,7 @@ export const OrderForm = ({ rules, bestBid, bestAsk, pickedPrice }: Props) => {
     } catch (error) {
       notification.error(error instanceof Error ? error.message : "Order failed");
     } finally {
+      inFlight.current = false;
       setSubmitting(false);
     }
   };

@@ -1,6 +1,6 @@
 # Lambdaplex Terminal: trade Hedera's order book from your own app
 
-[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://terminal-production-2a39.up.railway.app>** · **Testnet: [StrategyRegistry](https://hashscan.io/testnet/contract/0.0.10852712) + [HCS topic](https://hashscan.io/testnet/topic/0.0.10852716)** ([proof](#proof)) · **[Demo video (67s)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/releases/download/demo-video/lambdaplex-terminal-demo.mp4)**
+[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://terminal-production-2a39.up.railway.app>** · **Testnet: [StrategyRegistry](https://hashscan.io/testnet/contract/0.0.10853740) + [HCS topic](https://hashscan.io/testnet/topic/0.0.10852716)** ([proof](#proof)) · **[Demo video (67s)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/releases/download/demo-video/lambdaplex-terminal-demo.mp4)**
 
 A Scaffold-HBAR template for building on [Lambdaplex](https://www.lambdaplex.io), the Hedera-native order-book
 exchange. It gives you:
@@ -285,9 +285,10 @@ Everything below can be checked on HashScan and the mirror node.
 
 | What | Link |
 |---|---|
-| `StrategyRegistry` deployed with `yarn foundry:deploy --network hedera_testnet` as contract `0.0.10852712` (`0xfcB9…21d0`), 2.30M gas | [contract](https://hashscan.io/testnet/contract/0.0.10852712) · [deploy tx](https://hashscan.io/testnet/transaction/1791091602.803556288) |
+| `StrategyRegistry` deployed with `yarn foundry:deploy --network hedera_testnet` as contract `0.0.10853740` (`0xA3BE…Bb3e`), 2.41M gas | [contract](https://hashscan.io/testnet/contract/0.0.10853740) · [deploy tx](https://hashscan.io/testnet/transaction/1791097382.419337104) |
 | HCS track-record topic `0.0.10852716` created with `yarn lambdaplex:topic:create`; the submit key is the operator's ECDSA key and there is no admin key, so the record can't be deleted | [topic](https://hashscan.io/testnet/topic/0.0.10852716) · [create tx](https://hashscan.io/testnet/transaction/1791091631.604196395) |
-| Strategy #0 `TWAP HBAR-USDC` registered, linked to topic `0.0.10852716`. `paramsHash` = keccak256 of `{"strategy":"twap","symbol":"HBAR-USDC","side":"BUY","total":"50","slices":10,"intervalSeconds":60,"maxSlippageBps":50}` | [register tx](https://hashscan.io/testnet/transaction/1791091653.293133128) |
+| Strategy #0 `TWAP HBAR-USDC` registered, linked to topic `0.0.10852716`. `paramsHash` = keccak256 of `{"strategy":"twap","symbol":"HBAR-USDC","side":"BUY","total":"50","slices":10,"intervalSeconds":60,"maxSlippageBps":50}` | [register tx](https://hashscan.io/testnet/transaction/1791097388.621780104) |
+| Strategy #1 registered through the app's own `/registry` form (burner wallet), then handed to the deployer with `transferOperator`. Afterwards `strategiesOf(previous operator)` is empty and `strategiesOf(deployer)` is `[0, 1]` | [register tx](https://hashscan.io/testnet/transaction/1791097628.081631104) · [transfer tx](https://hashscan.io/testnet/transaction/1791097731.119467104) |
 
 The hosted terminal's [`/registry`](https://terminal-production-2a39.up.railway.app/registry) page reads strategy #0 from
 the contract, and `/bots` reads the topic from the mirror node.

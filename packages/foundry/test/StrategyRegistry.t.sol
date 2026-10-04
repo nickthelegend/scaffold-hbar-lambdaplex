@@ -130,6 +130,54 @@ contract StrategyRegistryTest is Test {
         registry.transferOperator(id, address(0));
     }
 
+    function test_transferOperator_movesIdBetweenLists() public {
+        uint256 first = _register(alice, "TWAP HBAR");
+        uint256 second = _register(alice, "TWAP SAUCE");
+        uint256 third = _register(alice, "TWAP PACK");
+
+        vm.prank(alice);
+        registry.transferOperator(first, bob);
+        uint256[] memory left = registry.strategiesOf(alice);
+        assertEq(left.length, 2, "alice keeps two");
+        assertTrue(left[0] != first && left[1] != first, "transferred id left alice's list");
+        assertEq(registry.strategiesOf(bob).length, 1);
+
+        // Back to alice: listed once, not twice.
+        vm.prank(bob);
+        registry.transferOperator(first, alice);
+        assertEq(registry.strategiesOf(alice).length, 3);
+        assertEq(registry.strategiesOf(bob).length, 0);
+
+        // Transferring to yourself changes nothing.
+        vm.prank(alice);
+        registry.transferOperator(second, alice);
+        assertEq(registry.strategiesOf(alice).length, 3);
+        assertEq(registry.getStrategy(third).operator, alice);
+    }
+
+    /// forge-config: default.fuzz.runs = 256
+    function testFuzz_strategiesOf_listsExactlyWhatEachOperatorRuns(uint8[16] calldata moves) public {
+        address[3] memory operators = [alice, bob, makeAddr("carol")];
+        for (uint256 i; i < 4; ++i) {
+            _register(operators[i % 3], "TWAP");
+        }
+        for (uint256 i; i < moves.length; ++i) {
+            uint256 id = moves[i] % 4;
+            address to = operators[(moves[i] / 4) % 3];
+            vm.prank(registry.getStrategy(id).operator);
+            registry.transferOperator(id, to);
+        }
+        uint256 listed;
+        for (uint256 o; o < 3; ++o) {
+            uint256[] memory ids = registry.strategiesOf(operators[o]);
+            listed += ids.length;
+            for (uint256 j; j < ids.length; ++j) {
+                assertEq(registry.getStrategy(ids[j]).operator, operators[o], "listed under its operator");
+            }
+        }
+        assertEq(listed, 4, "every strategy listed exactly once");
+    }
+
     function test_checkpoints_onlyMoveForward() public {
         uint256 id = _register(alice, "TWAP HBAR");
         vm.startPrank(alice);

@@ -80,9 +80,21 @@ export const TrackRecord = ({
               <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                   ["Fills", String(data.summary.fills)],
-                  ["Bought", formatAmount(data.summary.bought, 2)],
-                  ["Spent", formatAmount(data.summary.spent, 4)],
-                  ["Avg buy price", data.summary.averageBuyPrice ? formatAmount(data.summary.averageBuyPrice, 8) : "—"],
+                  // Show each side the strategy actually traded; a buy-only TWAP shouldn't show empty sell tiles.
+                  ...(Number(data.summary.bought) > 0
+                    ? [
+                        ["Bought", formatAmount(data.summary.bought, 2)],
+                        ["Spent", formatAmount(data.summary.spent, 4)],
+                        ["Avg buy price", formatAmount(data.summary.averageBuyPrice ?? "0", 8)],
+                      ]
+                    : []),
+                  ...(Number(data.summary.sold) > 0
+                    ? [
+                        ["Sold", formatAmount(data.summary.sold, 2)],
+                        ["Received", formatAmount(data.summary.received, 4)],
+                        ["Avg sell price", formatAmount(data.summary.averageSellPrice ?? "0", 8)],
+                      ]
+                    : []),
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl bg-base-200 px-3 py-2">
                     <dt className="text-xs uppercase tracking-wider text-base-content/60">{label}</dt>

@@ -33,6 +33,8 @@ contract StrategyRegistry {
     Strategy[] internal _strategies;
     mapping(uint256 => Checkpoint) internal _latestCheckpoint;
     mapping(address => uint256[]) internal _byOperator;
+    /// @dev Position of each strategy id in its operator's `_byOperator` list, for O(1) removal on transfer.
+    mapping(uint256 => uint256) internal _operatorSlot;
 
     event StrategyRegistered(uint256 indexed id, address indexed operator, uint64 topicNum, string name);
     event StrategyUpdated(uint256 indexed id, uint64 topicNum, bytes32 paramsHash);
@@ -76,6 +78,7 @@ contract StrategyRegistry {
                 venueAccount: venueAccount
             })
         );
+        _operatorSlot[id] = _byOperator[msg.sender].length;
         _byOperator[msg.sender].push(id);
         emit StrategyRegistered(id, msg.sender, topicNum, name);
     }
@@ -102,8 +105,19 @@ contract StrategyRegistry {
 
     function transferOperator(uint256 id, address newOperator) external onlyOperator(id) {
         if (newOperator == address(0)) revert InvalidOperator();
-        _strategies[id].operator = newOperator;
+        if (newOperator == msg.sender) return;
+
+        // Move the id between operators' lists (swap-and-pop), so `strategiesOf` only lists what each one operates.
+        uint256[] storage previous = _byOperator[msg.sender];
+        uint256 slot = _operatorSlot[id];
+        uint256 last = previous[previous.length - 1];
+        previous[slot] = last;
+        _operatorSlot[last] = slot;
+        previous.pop();
+
+        _operatorSlot[id] = _byOperator[newOperator].length;
         _byOperator[newOperator].push(id);
+        _strategies[id].operator = newOperator;
         emit OperatorTransferred(id, msg.sender, newOperator);
     }
 
@@ -139,7 +153,7 @@ contract StrategyRegistry {
         return _strategies.length;
     }
 
-    /// @notice Ids ever operated by `operator`, including ones since transferred away (check `operator` on each).
+    /// @notice Ids `operator` currently operates. Order changes when a strategy is transferred away.
     function strategiesOf(address operator) external view returns (uint256[] memory) {
         return _byOperator[operator];
     }

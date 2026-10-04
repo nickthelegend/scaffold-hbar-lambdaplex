@@ -17,7 +17,8 @@ function BotsContent() {
         </p>
       </header>
       <TwapPanel />
-      <TrackRecord defaultTopic={topic} />
+      {/* Keyed by the query string: a link to another strategy's record on this same page resets the field. */}
+      <TrackRecord key={topic ?? "configured"} defaultTopic={topic} />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { GenericContractsDeclaration } from "~~/utils/scaffold-hbar/contract";
 const deployedContracts = {
   296: {
     StrategyRegistry: {
-      address: "0xfcb9b6172a144e09420322fa4a4c7c6478ba21d0",
+      address: "0xa3be46151c6c9dcefbc2face5e4d80b386fabb3e",
       abi: [
         {
           type: "function",
@@ -535,7 +535,7 @@ const deployedContracts = {
         },
       ],
       inheritedFunctions: {},
-      deployedOnBlock: 41334177,
+      deployedOnBlock: 41337008,
     },
   },
 } as const;

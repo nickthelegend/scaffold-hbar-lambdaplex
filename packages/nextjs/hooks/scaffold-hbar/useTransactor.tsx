@@ -4,6 +4,7 @@ import { getPublicClient } from "wagmi/actions";
 import { SendTransactionMutate } from "wagmi/query";
 import scaffoldConfig from "~~/scaffold.config";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
+import { friendlyTxError } from "~~/utils/lambdaplex/txErrors";
 import { AllowedChainIds, getBlockExplorerTxLink, notification } from "~~/utils/scaffold-hbar";
 import { TransactorFuncOptions, getParsedErrorWithAllAbis } from "~~/utils/scaffold-hbar/contract";
 
@@ -97,7 +98,8 @@ export const useTransactor = (_walletClient?: WalletClient): TransactionFunc => 
         notification.remove(notificationId);
       }
       console.error("⚡️ ~ file: useTransactor.ts ~ error", error);
-      const message = getParsedErrorWithAllAbis(error, chainId as AllowedChainIds);
+      // The decoded error stays in the console above; the toast says it in words an operator can act on.
+      const message = friendlyTxError(getParsedErrorWithAllAbis(error, chainId as AllowedChainIds));
 
       // if receipt was reverted, show notification with block explorer link and return error
       if (transactionReceipt?.status === "reverted") {

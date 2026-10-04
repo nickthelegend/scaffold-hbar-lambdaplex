@@ -1,6 +1,6 @@
 # Lambdaplex Terminal: trade Hedera's order book from your own app
 
-[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://scaffold-hbar-lambdaplex.vercel.app>** · **Testnet: [StrategyRegistry](https://hashscan.io/testnet/contract/0.0.10853740) + [HCS topic](https://hashscan.io/testnet/topic/0.0.10852716)** ([proof](#proof)) · **[Demo video (67s)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/releases/download/demo-video/lambdaplex-terminal-demo.mp4)**
+[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://scaffold-hbar-lambdaplex.vercel.app>** · **Testnet: [StrategyRegistry](https://hashscan.io/testnet/contract/0.0.10853740) + [HCS topic](https://hashscan.io/testnet/topic/0.0.10852716)** ([proof](#proof)) · **[Demo video (67s)](https://scaffold-hbar-demos.vercel.app/lambdaplex-terminal.mp4)**
 
 A Scaffold-HBAR template for building on [Lambdaplex](https://www.lambdaplex.io), the Hedera-native order-book
 exchange. It gives you:
@@ -10,7 +10,7 @@ exchange. It gives you:
 - a **verifiable track record** on the Hedera Consensus Service, indexed on-chain by a `StrategyRegistry`.
 
 ```bash
-npm create scaffold-hbar@latest -- --template nickthelegend/scaffold-hbar-lambdaplex
+npm create scaffold-hbar@latest -- --template nickthelegend/scaffold-hbar-lambdaplex --package-manager yarn
 ```
 
 | | |
@@ -49,7 +49,7 @@ Prerequisites: Node ≥ 20.18.3, Yarn via `corepack enable` (the repo pins Yarn 
 want to work on contracts. The template is Yarn-only.
 
 ```bash
-npm create scaffold-hbar@latest -- --template nickthelegend/scaffold-hbar-lambdaplex
+npm create scaffold-hbar@latest -- --template nickthelegend/scaffold-hbar-lambdaplex --package-manager yarn
 cd my-hedera-dapp
 yarn next:dev                                   # http://localhost:3000
 ```
@@ -318,7 +318,8 @@ appends it to your topic, where `/bots` verifies it against its mainnet settleme
 
 [`AGENTS.md`](AGENTS.md) briefs coding agents on the packages, invariants and commands. [`.harness/`](.harness/)
 holds a [Hedera Harness](https://github.com/hedera-dev/hedera-harness) recipe with static, build and route
-validators.
+validators: `yarn harness:validate` (the route gate needs a browser once: `npx playwright install chromium`). CI runs
+them on a freshly scaffolded copy.
 
 ## License
 

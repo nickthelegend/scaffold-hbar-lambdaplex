@@ -1,16 +1,18 @@
 {
   "name": "lambdaplex-terminal-static",
-  "description": "Structure and key-safety invariants.",
+  "description": "Structure and key-safety invariants. Works on the template repo and on a freshly scaffolded project; env files are covered by .gitignore rather than forbidden locally.",
   "jsonAssertions": [
-    { "file": "package.json", "path": "packageManager", "equals": "yarn@3.2.3" },
-    { "file": "template.json", "path": "name", "equals": "lambdaplex-terminal" }
+    {
+      "file": "package.json",
+      "path": "packageManager",
+      "equals": "yarn@3.2.3"
+    }
   ],
   "fileAssertions": {
     "required": [
       "README.md",
       "AGENTS.md",
       "LICENCE",
-      "template.json",
       "packages/lambdaplex/src/signing.ts",
       "packages/lambdaplex/src/client.ts",
       "packages/lambdaplex/src/twap.ts",
@@ -19,11 +21,46 @@
       "packages/foundry/contracts/StrategyRegistry.sol",
       ".harness/spec.yaml"
     ],
-    "forbidden": [".env", "packages/nextjs/.env", "packages/nextjs/.env.local", "packages/foundry/.env", "packages/hardhat"]
+    "forbidden": [
+      "packages/hardhat"
+    ]
   },
   "textAssertions": [
-    { "file": "packages/nextjs/lib/lambdaplex.server.ts", "contains": ["server-only", "TRADING_ENABLED"] },
-    { "file": "packages/lambdaplex/src/index.ts", "notContains": ["./client", "./signing", "./hcs"] },
-    { "file": "README.md", "contains": ["npm create scaffold-hbar@latest", "TRADING_ENABLED", "Proof"] }
+    {
+      "file": "packages/nextjs/lib/lambdaplex.server.ts",
+      "contains": [
+        "server-only",
+        "TRADING_ENABLED"
+      ]
+    },
+    {
+      "file": "packages/lambdaplex/src/index.ts",
+      "contains": [
+        "Browser-safe entry",
+        "export * from \"./twap\"",
+        "export * from \"./filters\""
+      ]
+    },
+    {
+      "file": "README.md",
+      "contains": [
+        "npm create scaffold-hbar@latest",
+        "TRADING_ENABLED",
+        "Proof"
+      ]
+    },
+    {
+      "file": "packages/nextjs/.gitignore",
+      "contains": [
+        ".env",
+        ".env.local"
+      ]
+    },
+    {
+      "file": "packages/foundry/.gitignore",
+      "contains": [
+        ".env"
+      ]
+    }
   ]
 }

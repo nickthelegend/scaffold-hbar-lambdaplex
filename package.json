@@ -24,9 +24,9 @@
     "foundry:test": "yarn workspace @sh/foundry test",
     "foundry:verify:mainnet": "yarn workspace @sh/foundry verify:mainnet",
     "foundry:verify:testnet": "yarn workspace @sh/foundry verify:testnet",
-    "harness:doctor": "npx --yes hedera-harness@1.2.2 doctor",
-    "harness:run": "npx --yes hedera-harness@1.2.2 run",
-    "harness:validate": "npx --yes hedera-harness@1.2.2 validate",
+    "harness:doctor": "hedera-harness doctor",
+    "harness:run": "hedera-harness run",
+    "harness:validate": "hedera-harness validate",
     "lambdaplex:format": "yarn workspace @sh/lambdaplex format",
     "lambdaplex:lint": "yarn workspace @sh/lambdaplex lint",
     "lambdaplex:test": "yarn workspace @sh/lambdaplex test",
@@ -49,8 +49,10 @@
   },
   "packageManager": "yarn@3.2.3",
   "devDependencies": {
+    "hedera-harness": "1.2.2",
     "husky": "^9.1.6",
-    "lint-staged": "^15.2.10"
+    "lint-staged": "^15.2.10",
+    "playwright": "^1.58.0"
   },
   "engines": {
     "node": ">=20.18.3"

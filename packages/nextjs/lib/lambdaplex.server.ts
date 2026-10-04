@@ -41,7 +41,7 @@ export function hederaPublisher(): Client | undefined {
  */
 export function rejectCrossSite(req: NextRequest, { requireJson = false } = {}): NextResponse | undefined {
   const origin = req.headers.get("origin");
-  // Behind a proxy (Railway) the public host arrives in X-Forwarded-Host; pages cannot set either header cross-site.
+  // Behind a proxy (Vercel and most hosts) the public host arrives in X-Forwarded-Host; pages cannot set either header cross-site.
   const hosts = [req.headers.get("x-forwarded-host")?.split(",")[0]?.trim(), req.headers.get("host")].filter(Boolean);
   if (origin) {
     let originHost: string | undefined;

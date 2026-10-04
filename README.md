@@ -1,6 +1,6 @@
 # Lambdaplex Terminal: trade Hedera's order book from your own app
 
-[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://terminal-production-2a39.up.railway.app>** · **Testnet: [StrategyRegistry](https://hashscan.io/testnet/contract/0.0.10853740) + [HCS topic](https://hashscan.io/testnet/topic/0.0.10852716)** ([proof](#proof)) · **[Demo video (67s)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/releases/download/demo-video/lambdaplex-terminal-demo.mp4)**
+[![CI](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml/badge.svg)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml) · **Live demo (read-only): <https://scaffold-hbar-lambdaplex.vercel.app>** · **Testnet: [StrategyRegistry](https://hashscan.io/testnet/contract/0.0.10853740) + [HCS topic](https://hashscan.io/testnet/topic/0.0.10852716)** ([proof](#proof)) · **[Demo video (67s)](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/releases/download/demo-video/lambdaplex-terminal-demo.mp4)**
 
 A Scaffold-HBAR template for building on [Lambdaplex](https://www.lambdaplex.io), the Hedera-native order-book
 exchange. It gives you:
@@ -120,6 +120,13 @@ Run it from the UI (`/bots`, jobs run inside the Next server) or as a long-lived
 ```bash
 yarn lambdaplex:twap --symbol HBAR-USDC --side BUY --total 10 --slices 2 --interval 60 --slippage-bps 50 --live
 ```
+
+**Serverless hosting (Vercel).** A serverless function ends when its response is sent and shares no memory with the
+next one, so it can't host jobs that run for minutes in the background. When `VERCEL` is set (or `TWAP_JOBS=inline`),
+`/bots` dry runs price every slice inside the request against the book as it is now and return the finished job, and
+live TWAPs are refused with a pointer to the alternatives. That's how the [hosted terminal](https://scaffold-hbar-lambdaplex.vercel.app/bots)
+runs. For live bots, use the CLI above or self-host with `yarn next:build && yarn next:serve` (set `TWAP_JOBS=background`
+if your host sets `VERCEL`).
 
 ## Verifiable track record
 
@@ -290,7 +297,7 @@ Everything below can be checked on HashScan and the mirror node.
 | Strategy #0 `TWAP HBAR-USDC` registered, linked to topic `0.0.10852716`. `paramsHash` = keccak256 of `{"strategy":"twap","symbol":"HBAR-USDC","side":"BUY","total":"50","slices":10,"intervalSeconds":60,"maxSlippageBps":50}` | [register tx](https://hashscan.io/testnet/transaction/1791097388.621780104) |
 | Strategy #1 registered through the app's own `/registry` form (burner wallet), then handed to the deployer with `transferOperator`. Afterwards `strategiesOf(previous operator)` is empty and `strategiesOf(deployer)` is `[0, 1]` | [register tx](https://hashscan.io/testnet/transaction/1791097628.081631104) · [transfer tx](https://hashscan.io/testnet/transaction/1791097731.119467104) |
 
-The hosted terminal's [`/registry`](https://terminal-production-2a39.up.railway.app/registry) page reads strategy #0 from
+The hosted terminal's [`/registry`](https://scaffold-hbar-lambdaplex.vercel.app/registry) page reads strategy #0 from
 the contract, and `/bots` reads the topic from the mirror node.
 
 **Hedera mainnet: the Lambdaplex half**
@@ -298,7 +305,7 @@ the contract, and `/bots` reads the topic from the mirror node.
 Lambdaplex only runs on mainnet. CI's `live` job calls its public REST API on every push: it parses the live market
 rules, checks the HBAR-USDC book, plans a full dry-run TWAP against live data, and validates an order built from the
 current best ask. The [CI runs](https://github.com/nickthelegend/scaffold-hbar-lambdaplex/actions/workflows/ci.yaml)
-are the evidence. The [hosted terminal](https://terminal-production-2a39.up.railway.app) streams the live HBAR-USDC
+are the evidence. The [hosted terminal](https://scaffold-hbar-lambdaplex.vercel.app) streams the live HBAR-USDC
 book and trades over WebSocket. Its trading routes are switched off (`TRADING_ENABLED=false`), so a public demo can't
 spend anyone's funds.
 

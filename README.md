@@ -308,8 +308,8 @@ Everything below can be checked on HashScan and the mirror node.
 | Strategy #0 `TWAP HBAR-USDC` registered, linked to topic `0.0.10852716`. `paramsHash` = keccak256 of `{"strategy":"twap","symbol":"HBAR-USDC","side":"BUY","total":"50","slices":10,"intervalSeconds":60,"maxSlippageBps":50}` | [register tx](https://hashscan.io/testnet/transaction/1791097388.621780104) |
 | Strategy #1 registered through the app's own `/registry` form (burner wallet), then handed to the deployer with `transferOperator`. Afterwards `strategiesOf(previous operator)` is empty and `strategiesOf(deployer)` is `[0, 1]` | [register tx](https://hashscan.io/testnet/transaction/1791097628.081631104) · [transfer tx](https://hashscan.io/testnet/transaction/1791097731.119467104) |
 
-The hosted terminal's [`/registry`](https://scaffold-hbar-lambdaplex.vercel.app/registry) page reads strategy #0 from
-the contract, and `/bots` reads the topic from the mirror node.
+The hosted terminal's [`/registry`](https://scaffold-hbar-lambdaplex.vercel.app/registry) page lists strategies #0 and #1
+from the contract, and `/bots` reads the topic from the mirror node.
 
 **Hedera mainnet: the Lambdaplex half**
 

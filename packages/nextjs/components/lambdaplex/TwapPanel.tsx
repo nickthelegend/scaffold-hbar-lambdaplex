@@ -56,7 +56,7 @@ export const TwapPanel = () => {
   const [form, setForm] = useState({
     symbol: "HBAR-USDC",
     side: "BUY" as OrderSide,
-    total: "10",
+    total: "12",
     slices: "2",
     intervalSeconds: "60",
     maxSlippageBps: "50",

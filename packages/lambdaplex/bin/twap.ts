@@ -1,9 +1,10 @@
 /**
  * Runs a TWAP on Lambdaplex and publishes each settled fill to an HCS track-record topic.
  *
- *   yarn lambdaplex:twap --symbol HBAR-USDC --side BUY --total 10 --slices 2 --interval 60 [--slippage-bps 50] [--live]
+ *   yarn lambdaplex:twap --symbol HBAR-USDC --side BUY --total 12 --slices 2 --interval 60 [--slippage-bps 50] [--live]
  *
  * Without --live it is a dry run: every slice is planned and validated against live market data, nothing is sent.
+ * --publish-plan (dry runs) records the planned orders in the track-record topic as a `dry-run` plan, never as fills.
  * Env: LAMBDAPLEX_API_KEY, LAMBDAPLEX_PRIVATE_KEY (trading); HEDERA_OPERATOR_ID, HEDERA_OPERATOR_KEY,
  * HEDERA_OPERATOR_KEY_TYPE, TRACK_RECORD_TOPIC_ID, HEDERA_NETWORK (track record, optional); STRATEGY_NAME.
  * Ctrl-C stops before the next slice; an order already sent is still accounted for.
@@ -11,8 +12,8 @@
 import { config as loadEnv } from "dotenv";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { entryFromFill, runTwap, type TwapConfig, validateTwapConfig } from "../src";
-import { LambdaplexClient, operatorClient, publishEntry } from "../src/server";
+import { entryFromFill, type PlanEntry, runTwap, type TwapConfig, validateTwapConfig } from "../src";
+import { LambdaplexClient, operatorClient, publishEntry, publishPlan } from "../src/server";
 
 // fileURLToPath, not URL.pathname: the latter keeps %20 for paths with spaces and dotenv silently finds nothing.
 loadEnv({ path: fileURLToPath(new URL("../../nextjs/.env.local", import.meta.url)) });
@@ -27,6 +28,7 @@ const { values } = parseArgs({
     interval: { type: "string", default: "60" },
     "slippage-bps": { type: "string", default: "50" },
     live: { type: "boolean", default: false },
+    "publish-plan": { type: "boolean", default: false },
   },
 });
 
@@ -67,12 +69,19 @@ process.once("SIGINT", () => {
   stop.abort();
 });
 
+// A dry run with --publish-plan records the orders it would have placed (never as fills) in the track record.
+const plannedAt = Date.now();
+const orders: PlanEntry["orders"] = [];
+
 try {
   const result = await runTwap(lambdaplex, twap, {
     dryRun: !values.live,
     signal: stop.signal,
     onEvent: async event => {
       console.log(JSON.stringify(event));
+      if (event.type === "slice-skipped" && event.planned) {
+        orders.push({ price: event.planned.price, qty: event.planned.quantity });
+      }
       if (event.type === "fill" && hedera && topicId) {
         const entry = entryFromFill(strategy, twap.symbol, twap.side, event.clientOrderId, event.fill);
         try {
@@ -86,6 +95,24 @@ try {
     },
   });
   console.log(`Filled ${result.filledBase} base for ${result.filledQuote} quote; unfilled ${result.unfilled}`);
+  if (values["publish-plan"] && !values.live) {
+    if (!hedera || !topicId) throw new Error("--publish-plan needs TRACK_RECORD_TOPIC_ID and HEDERA_OPERATOR_ID/KEY");
+    const plan: PlanEntry = {
+      v: 1,
+      kind: "dry-run",
+      strategy,
+      venue: "lambdaplex",
+      symbol: twap.symbol,
+      side: twap.side,
+      total: twap.total,
+      slices: twap.slices,
+      maxSlippageBps: twap.maxSlippageBps,
+      time: plannedAt,
+      orders,
+    };
+    const { sequenceNumber, transactionId } = await publishPlan(hedera, topicId, plan);
+    console.log(`  → dry-run plan published as #${sequenceNumber} on ${topicId} (${transactionId})`);
+  }
   if (result.stopReason) console.log(`Stopped early: ${result.stopReason}`);
   if (result.unresolved !== "0") {
     console.error(`UNRESOLVED ${result.unresolved}: check open orders and fills on Lambdaplex before trading it again`);

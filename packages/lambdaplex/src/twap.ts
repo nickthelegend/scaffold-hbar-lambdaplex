@@ -103,7 +103,14 @@ export function planSlice(rules: MarketRules, config: TwapConfig, amount: string
 }
 
 export type TwapEvent =
-  | { type: "slice-skipped"; slice: number; reason: string; carried: string }
+  | {
+      type: "slice-skipped";
+      slice: number;
+      reason: string;
+      carried: string;
+      /** Dry runs only: the IOC limit order this slice would have placed. */
+      planned?: { price: string; quantity: string };
+    }
   | { type: "order-placed"; slice: number; orderId: string; clientOrderId: string; price: string; quantity: string }
   | { type: "fill"; slice: number; orderId: string; clientOrderId: string; fill: Fill }
   | {
@@ -271,6 +278,7 @@ export async function runTwap(
         slice: i,
         reason: `dry run: would ${config.side} ${plan.quantity} @ ${plan.price}`,
         carried: "0",
+        planned: { price: plan.price, quantity: plan.quantity },
       });
       continue;
     }

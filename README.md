@@ -64,7 +64,7 @@ yarn next:dev                                   # http://localhost:3000
 From the terminal:
 
 ```bash
-yarn lambdaplex:twap --total 10 --slices 2        # dry run against live market data
+yarn lambdaplex:twap --total 12 --slices 2        # dry run against live market data
 yarn lambdaplex:test                              # SDK unit tests
 yarn lambdaplex:test:live                         # tests against the real Lambdaplex API
 ```
@@ -118,7 +118,7 @@ order executed before it carries anything:
 Run it from the UI (`/bots`, jobs run inside the Next server) or as a long-lived CLI process:
 
 ```bash
-yarn lambdaplex:twap --symbol HBAR-USDC --side BUY --total 10 --slices 2 --interval 60 --slippage-bps 50 --live
+yarn lambdaplex:twap --symbol HBAR-USDC --side BUY --total 12 --slices 2 --interval 60 --slippage-bps 50 --live
 ```
 
 **Serverless hosting (Vercel).** A serverless function ends when its response is sent and shares no memory with the
@@ -144,7 +144,17 @@ template publishes every settled fill to an **HCS topic** whose **submit key** b
 yarn lambdaplex:topic:create          # prints TRACK_RECORD_TOPIC_ID; put it in .env.local
 ```
 
-Entry format (`v: 1`, under 1 KiB, decoded strictly; anything malformed is ignored):
+**Dry-run plans.** `yarn lambdaplex:twap --total 12 --slices 2 --publish-plan` (no `--live`) prices every slice
+against the live book and publishes the orders it *would* place as a `kind: "dry-run"` record in the same topic. `/bots`
+lists these under "Dry-run plans" with when they were priced; they never count as fills and are never checked as
+settlements. They show a strategy's intent and the market it saw, signed by the same operator key as its fills.
+
+```json
+{"v":1,"kind":"dry-run","strategy":"twap-hbar-usdc","venue":"lambdaplex","symbol":"HBAR-USDC","side":"BUY",
+ "total":"12","slices":2,"maxSlippageBps":50,"time":1791103056179,"orders":[{"price":"0.103895","qty":"57"},…]}
+```
+
+Fill entry format (`v: 1`, under 1 KiB, decoded strictly; anything malformed is ignored):
 
 ```json
 {"v":1,"strategy":"twap-hbar-usdc","venue":"lambdaplex","symbol":"HBAR-USDC","side":"BUY",
@@ -292,8 +302,9 @@ Everything below can be checked on HashScan and the mirror node.
 
 | What | Link |
 |---|---|
-| `StrategyRegistry` deployed with `yarn foundry:deploy --network hedera_testnet` as contract `0.0.10853740` (`0xA3BE…Bb3e`), 2.41M gas | [contract](https://hashscan.io/testnet/contract/0.0.10853740) · [deploy tx](https://hashscan.io/testnet/transaction/1791097382.419337104) |
+| `StrategyRegistry` deployed with `yarn foundry:deploy --network hedera_testnet` as contract `0.0.10853740` (`0xA3BE…Bb3e`), 2.41M gas; source verified on Sourcify (exact match) with `yarn foundry:verify:testnet` | [contract](https://hashscan.io/testnet/contract/0.0.10853740) · [source](https://repo.sourcify.dev/296/0xA3BE46151c6c9DceFBC2FaCe5E4d80b386faBb3e) · [deploy tx](https://hashscan.io/testnet/transaction/1791097382.419337104) |
 | HCS track-record topic `0.0.10852716` created with `yarn lambdaplex:topic:create`; the submit key is the operator's ECDSA key and there is no admin key, so the record can't be deleted | [topic](https://hashscan.io/testnet/topic/0.0.10852716) · [create tx](https://hashscan.io/testnet/transaction/1791091631.604196395) |
+| Dry-run plan #1 published to the topic by the operator with `yarn lambdaplex:twap --total 12 --slices 2 --publish-plan`: two IOC slices of 57 HBAR at 0.103895, priced against the live mainnet HBAR-USDC book. It shows on `/bots` under "Dry-run plans" and is never counted as a fill | [topic message](https://hashscan.io/testnet/transaction/1791103058.334208104) |
 | Strategy #0 `TWAP HBAR-USDC` registered, linked to topic `0.0.10852716`. `paramsHash` = keccak256 of `{"strategy":"twap","symbol":"HBAR-USDC","side":"BUY","total":"50","slices":10,"intervalSeconds":60,"maxSlippageBps":50}` | [register tx](https://hashscan.io/testnet/transaction/1791097388.621780104) |
 | Strategy #1 registered through the app's own `/registry` form (burner wallet), then handed to the deployer with `transferOperator`. Afterwards `strategiesOf(previous operator)` is empty and `strategiesOf(deployer)` is `[0, 1]` | [register tx](https://hashscan.io/testnet/transaction/1791097628.081631104) · [transfer tx](https://hashscan.io/testnet/transaction/1791097731.119467104) |
 

@@ -1,4 +1,4 @@
-import { type TrackRecordEntry, decodeEntry, mirrorTransactionId } from "@sh/lambdaplex";
+import { type PlanEntry, type TrackRecordEntry, decodeEntry, decodePlan, mirrorTransactionId } from "@sh/lambdaplex";
 
 export type HederaNetwork = "testnet" | "mainnet";
 
@@ -42,29 +42,38 @@ export const decodeTopicMessages = (messages: MirrorTopicMessage[]): TrackRecord
       : [];
   });
 
+export type PlanMessage = { sequenceNumber: number; consensusTimestamp: string; plan: PlanEntry };
+
+/** Decodes the topic's dry-run plan records (see `PlanEntry`); fills and anything malformed are skipped. */
+export const decodePlanMessages = (messages: MirrorTopicMessage[]): PlanMessage[] =>
+  messages.flatMap(m => {
+    const plan = decodePlan(decodeBase64(m.message));
+    return plan ? [{ sequenceNumber: m.sequence_number, consensusTimestamp: m.consensus_timestamp, plan }] : [];
+  });
+
 /** Absolute URL of the mirror node's `links.next` (a path such as `/api/v1/topics/…?timestamp=gt:…`), or null. */
 export const mirrorNextUrl = (network: HederaNetwork, next?: string | null): string | null =>
   next ? `${new URL(MIRROR[network]).origin}${next}` : null;
 
 export const MAX_TRACK_RECORD_MESSAGES = 5_000;
 
-/** Track-record entries from an HCS topic, oldest first, following `links.next` up to `maxMessages`. */
+/** Fills and dry-run plans from an HCS topic, oldest first, following `links.next` up to `maxMessages`. */
 export async function fetchTrackRecord(
   network: HederaNetwork,
   topicId: string,
   maxMessages = MAX_TRACK_RECORD_MESSAGES,
-): Promise<TrackRecordMessage[]> {
+): Promise<{ fills: TrackRecordMessage[]; plans: PlanMessage[] }> {
   let url: string | null = `${MIRROR[network]}/topics/${topicId}/messages?order=asc&limit=100`;
   const messages: MirrorTopicMessage[] = [];
   while (url && messages.length < maxMessages) {
     const res = await fetch(url);
-    if (res.status === 404) return [];
+    if (res.status === 404) return { fills: [], plans: [] };
     if (!res.ok) throw new Error(`Mirror node: topic ${topicId} (${res.status})`);
     const page = (await res.json()) as { messages: MirrorTopicMessage[]; links?: { next?: string | null } };
     messages.push(...page.messages);
     url = mirrorNextUrl(network, page.links?.next);
   }
-  return decodeTopicMessages(messages);
+  return { fills: decodeTopicMessages(messages), plans: decodePlanMessages(messages) };
 }
 
 export type TopicInfo = { memo: string; submitKey: string | null; adminKey: string | null };

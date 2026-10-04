@@ -10,7 +10,8 @@ type WsTrade = { e: "trade"; s: string; t: number; p: string; q: string; m: bool
  * (`<symbol>@depth`, `<symbol>@trade`) makes them live: depth events trigger a fresh snapshot and trades are
  * prepended as they print. If the socket drops, polling keeps the view current.
  */
-export function useMarketStream(symbol: string) {
+/** `enabled: false` (an unknown symbol) skips the REST snapshots and the socket entirely. */
+export function useMarketStream(symbol: string, { enabled = true }: { enabled?: boolean } = {}) {
   const queryClient = useQueryClient();
   const [connected, setConnected] = useState(false);
   const lastSnapshot = useRef(0);
@@ -18,15 +19,18 @@ export function useMarketStream(symbol: string) {
   const book = useQuery({
     queryKey: ["lambdaplex", "depth", symbol],
     queryFn: () => publicApi.depth(symbol, 20),
+    enabled,
     refetchInterval: connected ? 15_000 : 3_000,
   });
   const trades = useQuery({
     queryKey: ["lambdaplex", "trades", symbol],
     queryFn: async () => (await publicApi.trades(symbol, 100)).sort((a, b) => b.time - a.time),
+    enabled,
     refetchInterval: connected ? 60_000 : 10_000,
   });
 
   useEffect(() => {
+    if (!enabled) return;
     let socket: WebSocket | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let trailingDepth: ReturnType<typeof setTimeout> | undefined;
@@ -98,7 +102,7 @@ export function useMarketStream(symbol: string) {
       }
       setConnected(false);
     };
-  }, [symbol, queryClient]);
+  }, [symbol, enabled, queryClient]);
 
   return {
     book: book.data as OrderBook | undefined,

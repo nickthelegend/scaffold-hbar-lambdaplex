@@ -96,6 +96,61 @@ export function decodeEntry(message: string): TrackRecordEntry | null {
   return entry as TrackRecordEntry;
 }
 
+/**
+ * A TWAP plan priced against the live book and published without trading (`kind: "dry-run"`). It shows a strategy's
+ * intent and the market it saw, in the same consensus-ordered, operator-only topic as its fills, and is never counted
+ * as a fill or verified as a settlement.
+ */
+export type PlanEntry = {
+  v: 1;
+  kind: "dry-run";
+  strategy: string;
+  venue: "lambdaplex";
+  symbol: string;
+  side: OrderSide;
+  total: string;
+  slices: number;
+  maxSlippageBps: number;
+  /** When the plan was priced (ms). */
+  time: number;
+  /** The IOC limit orders the run would have placed, in slice order; skipped slices are left out. */
+  orders: { price: string; qty: string }[];
+};
+
+/** JSON message for HCS. Throws if it would not fit in a single (unchunked) message. */
+export function encodePlan(entry: PlanEntry): string {
+  const message = JSON.stringify(entry);
+  if (new TextEncoder().encode(message).length > HCS_MAX_MESSAGE_BYTES) throw new Error("plan record exceeds 1 KiB");
+  return message;
+}
+
+/** Parses a topic message; returns null for anything that is not a well-formed v1 dry-run plan. */
+export function decodePlan(message: string): PlanEntry | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(message);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const plan = value as Record<string, unknown>;
+  if (plan.v !== 1 || plan.kind !== "dry-run" || plan.venue !== "lambdaplex") return null;
+  if (plan.side !== "BUY" && plan.side !== "SELL") return null;
+  if (typeof plan.strategy !== "string" || typeof plan.symbol !== "string") return null;
+  if (typeof plan.total !== "string" || !PLAIN_DECIMAL.test(plan.total)) return null;
+  if (!Number.isInteger(plan.slices) || !Number.isInteger(plan.maxSlippageBps)) return null;
+  if (typeof plan.time !== "number" || !Number.isFinite(plan.time)) return null;
+  if (!Array.isArray(plan.orders)) return null;
+  const ordersOk = plan.orders.every(
+    order =>
+      order &&
+      typeof order === "object" &&
+      PLAIN_DECIMAL.test(String((order as Record<string, unknown>).price)) &&
+      PLAIN_DECIMAL.test(String((order as Record<string, unknown>).qty)),
+  );
+  return ordersOk ? (plan as PlanEntry) : null;
+}
+
 /** Hedera transaction ids (`0.0.x@seconds.nanos`) as the mirror node REST path expects them (`0.0.x-seconds-nanos`). */
 export function mirrorTransactionId(transactionId: string): string {
   const match = /^(\d+\.\d+\.\d+)@(\d+)\.(\d+)$/.exec(transactionId.trim());

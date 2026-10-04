@@ -31,7 +31,8 @@ export default function TradePage({ params }: { params: Promise<{ symbol: string
   const { symbol } = use(params);
   const { data: markets } = useMarkets();
   const rules = markets?.find(m => m.symbol === symbol);
-  const { book, trades, connected, error } = useMarketStream(symbol);
+  // Wait for the market list: an unknown symbol must not hit the depth/trades endpoints or open a socket.
+  const { book, trades, connected, error } = useMarketStream(symbol, { enabled: Boolean(rules) });
   const [picked, setPicked] = useState<string>();
 
   if (markets && !rules) {

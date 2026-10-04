@@ -6,7 +6,14 @@ import {
   TopicId,
   TopicMessageSubmitTransaction,
 } from "@hiero-ledger/sdk";
-import { decodeEntry, encodeEntry, mirrorTransactionId, type TrackRecordEntry } from "./trackRecord";
+import {
+  decodeEntry,
+  encodeEntry,
+  encodePlan,
+  mirrorTransactionId,
+  type PlanEntry,
+  type TrackRecordEntry,
+} from "./trackRecord";
 
 export const MIRROR_NODES = {
   testnet: "https://testnet.mirrornode.hedera.com/api/v1",
@@ -45,6 +52,16 @@ export async function createTrackRecordTopic(client: Client, memo: string) {
   const response = await new TopicCreateTransaction().setTopicMemo(memo).setSubmitKey(operatorKey).execute(client);
   const { topicId } = await response.getReceipt(client);
   return topicId!.toString();
+}
+
+/** Publishes a dry-run plan record (see `PlanEntry`) to the strategy's topic. */
+export async function publishPlan(client: Client, topicId: string, plan: PlanEntry) {
+  const response = await new TopicMessageSubmitTransaction()
+    .setTopicId(TopicId.fromString(topicId))
+    .setMessage(encodePlan(plan))
+    .execute(client);
+  const receipt = await response.getReceipt(client);
+  return { transactionId: response.transactionId.toString(), sequenceNumber: Number(receipt.topicSequenceNumber) };
 }
 
 export async function publishEntry(client: Client, topicId: string, entry: TrackRecordEntry) {

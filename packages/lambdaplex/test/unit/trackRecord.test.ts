@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { decodeEntry, encodeEntry, entryFromFill, mirrorTransactionId, summarize } from "../../src/trackRecord";
+import {
+  decodeEntry,
+  decodePlan,
+  encodeEntry,
+  encodePlan,
+  entryFromFill,
+  mirrorTransactionId,
+  type PlanEntry,
+  summarize,
+} from "../../src/trackRecord";
 import type { Fill } from "../../src/types";
 
 const fill: Fill = {
@@ -60,5 +69,38 @@ describe("track record", () => {
       averageBuyPrice: "0.10151793",
       sold: "0",
     });
+  });
+});
+
+describe("dry-run plan records", () => {
+  const plan: PlanEntry = {
+    v: 1,
+    kind: "dry-run",
+    strategy: "twap-hbar-usdc",
+    venue: "lambdaplex",
+    symbol: "HBAR-USDC",
+    side: "BUY",
+    total: "12",
+    slices: 2,
+    maxSlippageBps: 50,
+    time: 1791100000000,
+    orders: [
+      { price: "0.104187", qty: "57" },
+      { price: "0.104187", qty: "57" },
+    ],
+  };
+
+  it("round-trips through the topic message", () => {
+    expect(decodePlan(encodePlan(plan))).toEqual(plan);
+  });
+
+  it("is never mistaken for a fill, and a fill never for a plan", () => {
+    expect(decodeEntry(encodePlan(plan))).toBeNull();
+    expect(decodePlan(JSON.stringify({ ...plan, kind: "fill" }))).toBeNull();
+  });
+
+  it("rejects malformed amounts", () => {
+    expect(decodePlan(JSON.stringify({ ...plan, total: "-1" }))).toBeNull();
+    expect(decodePlan(JSON.stringify({ ...plan, orders: [{ price: "1e3", qty: "1" }] }))).toBeNull();
   });
 });

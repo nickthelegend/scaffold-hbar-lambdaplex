@@ -14,7 +14,7 @@ Yarn only (`yarn <script>`); the root `package.json` pins Yarn 3.2.3.
 yarn next:dev                     # terminal on http://localhost:3000 (read-only without keys)
 yarn lambdaplex:test              # SDK unit tests (signing vectors, rules, TWAP, track record)
 yarn lambdaplex:test:live         # SDK against the real Lambdaplex API
-yarn lambdaplex:twap --total 10 --slices 2 [--live]
+yarn lambdaplex:twap --total 12 --slices 2 [--live | --publish-plan]
 yarn lambdaplex:topic:create      # HCS topic for the track record
 yarn foundry:test                 # StrategyRegistry
 yarn foundry:deploy --network hedera_testnet

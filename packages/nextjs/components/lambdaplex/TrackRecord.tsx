@@ -152,8 +152,44 @@ export const TrackRecord = ({
             </>
           ) : (
             <p className="m-0 text-sm text-base-content/60">
-              No entries yet. Live TWAP fills appear here once settled.
+              No settled fills yet. Live TWAP fills appear here once they are settlement-final on Hedera.
             </p>
+          )}
+
+          {data && data.plans.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <h3 className="m-0 text-sm font-semibold">
+                Dry-run plans <span className="font-normal text-base-content/60">(published, never traded)</span>
+              </h3>
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {data.plans.map(({ sequenceNumber, consensusTimestamp, plan }) => (
+                  <li key={sequenceNumber} className="rounded-xl bg-base-200 px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">
+                        #{sequenceNumber} · {plan.side} {formatAmount(plan.total, 4)}{" "}
+                        {plan.side === "BUY" ? plan.symbol.split("-")[1] : plan.symbol.split("-")[0]} on {plan.symbol}{" "}
+                        in {plan.slices} slices, ≤ {plan.maxSlippageBps} bps
+                      </span>
+                      <a
+                        className="link text-xs text-base-content/60"
+                        href={hashscan(network, "transaction", consensusTimestamp)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        priced {formatDateTime(plan.time)}
+                      </a>
+                    </div>
+                    <p className="m-0 mt-1 text-xs text-base-content/70 tabular-nums">
+                      {plan.orders.length
+                        ? plan.orders
+                            .map(o => `${plan.side} ${formatAmount(o.qty, 2)} @ ${formatAmount(o.price, 8)}`)
+                            .join(" · ")
+                        : "No slice met the exchange minimums at that moment."}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </>
       )}
